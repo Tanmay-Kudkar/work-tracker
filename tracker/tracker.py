@@ -17,8 +17,8 @@ ENVIRONMENT = os.environ.get("TRACKER_ENV", "development")  # 'development' or '
 
 # Server URLs
 if ENVIRONMENT == "production":
-    # Update this with your Render.com backend URL after deployment
-    SERVER_URL = os.environ.get("TRACKER_SERVER", "https://worktracker-api.onrender.com/api")
+    # Your Render.com backend URL
+    SERVER_URL = os.environ.get("TRACKER_SERVER", "https://work-tracker-backend-3pts.onrender.com/api")
     print("🌐 Running in PRODUCTION mode")
 else:
     # Local development

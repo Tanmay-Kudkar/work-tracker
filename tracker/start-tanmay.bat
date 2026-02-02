@@ -1,6 +1,7 @@
 @echo off
-REM WorkTracker - Tanmay Kudkar
-cd /d "S:\Work-Tracker\tracker"
+REM WorkTracker - Tanmay Kudkar (PRODUCTION)
+cd /d "%~dp0"
 set TRACKER_USER=tanmay_kudkar
-S:\Work-Tracker\.venv-win\Scripts\python.exe tracker.py
+set TRACKER_ENV=production
+python tracker.py
 pause
