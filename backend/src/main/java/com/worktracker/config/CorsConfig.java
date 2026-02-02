@@ -13,9 +13,14 @@ public class CorsConfig implements WebMvcConfigurer {
 
     @Override
     public void addCorsMappings(CorsRegistry registry) {
-        registry.addMapping("/**")
-                .allowedOrigins(frontendUrl)
-                .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+        registry.addMapping("/api/**")
+                .allowedOrigins(
+                    frontendUrl,
+                    "http://localhost:5173",
+                    "http://localhost:4173",
+                    "https://work-tracker-webapp.onrender.com"
+                )
+                .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD")
                 .allowedHeaders("*")
                 .allowCredentials(true)
                 .maxAge(3600);
