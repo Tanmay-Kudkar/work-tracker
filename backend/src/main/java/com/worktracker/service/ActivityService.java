@@ -122,17 +122,25 @@ public class ActivityService {
         long totalMinutes = calculateTotalActiveTime(logs);
         String currentApp = logs.isEmpty() ? null : logs.get(logs.size() - 1).getApplicationName();
 
-        // Check if user is currently active (regardless of selected date)
-        // Find the most recent activity log across all time (last 2 minutes for instant
-        // updates)
-        List<ActivityLog> recentLogs = activityLogRepository
+        // Check if user is currently active by finding their most recent activity
+        // Note: We compare against all logs to find the absolute most recent one
+        List<ActivityLog> allUserLogs = activityLogRepository
                 .findByUsernameAndTimestampBetweenOrderByTimestampAsc(
                         username,
-                        now.minusMinutes(2),
-                        now);
+                        LocalDateTime.now().minusHours(1), // Look back 1 hour to be safe
+                        LocalDateTime.now().plusHours(1)); // Look forward 1 hour for timezone issues
 
-        // User is active if they have any activity in the last 2 minutes
-        boolean isActive = !recentLogs.isEmpty();
+        boolean isActive = false;
+        if (!allUserLogs.isEmpty()) {
+            // Get the most recent log
+            ActivityLog mostRecent = allUserLogs.get(allUserLogs.size() - 1);
+            // Consider active if most recent activity is within 2 minutes from now
+            // Use current system time to compare
+            long minutesSinceLastActivity = java.time.Duration.between(
+                    mostRecent.getTimestamp(),
+                    LocalDateTime.now()).abs().toMinutes();
+            isActive = minutesSinceLastActivity < 2;
+        }
 
         return MemberSummaryDto.builder()
                 .username(username)
@@ -140,8 +148,8 @@ public class ActivityService {
                 .totalActiveMinutes(totalMinutes)
                 .totalActiveHours(String.format("%.1f", totalMinutes / 60.0))
                 .isActive(isActive)
-                .currentApplication(isActive ? normalizeAppName(
-                        recentLogs.isEmpty() ? null : recentLogs.get(recentLogs.size() - 1).getApplicationName())
+                .currentApplication(isActive && !allUserLogs.isEmpty()
+                        ? normalizeAppName(allUserLogs.get(allUserLogs.size() - 1).getApplicationName())
                         : null)
                 .topApp(getTopApp(logs))
                 .build();
