@@ -8,6 +8,32 @@ import signal
 import psutil
 from datetime import datetime
 
+# Detect OS
+IS_WINDOWS = platform.system() == "Windows"
+IS_MAC = platform.system() == "Darwin"
+IS_LINUX = platform.system() == "Linux"
+
+# Import platform-specific modules
+if IS_WINDOWS:
+    try:
+        import win32gui
+        import win32process
+    except ImportError:
+        print("⚠️  Missing Windows dependencies. Run: pip install pywin32")
+        win32gui = None
+        win32process = None
+elif IS_MAC:
+    try:
+        from AppKit import NSWorkspace
+        from Quartz import (
+            CGWindowListCopyWindowInfo,
+            kCGWindowListOptionOnScreenOnly,
+            kCGNullWindowID
+        )
+    except ImportError:
+        print("⚠️  Missing Mac dependencies. Run: pip install pyobjc-framework-Cocoa pyobjc-framework-Quartz")
+        NSWorkspace = None
+
 # ============================================
 # Configuration
 # ============================================
@@ -41,11 +67,15 @@ VALID_MEMBERS = [
     "parth_waghe"
 ]
 
-# Tracking interval (seconds)
-TRACKING_INTERVAL = int(os.environ.get("TRACKER_INTERVAL", "1"))
+# Tracking interval (seconds) - 30 sec for optimal storage savings
+TRACKING_INTERVAL = int(os.environ.get("TRACKER_INTERVAL", "30"))
 
 # Track active sessions
 active_sessions = {}  # {app_name: {"start_time": datetime, "process_name": str}}
+
+def is_dev_app(app_name):
+    """Track all apps (filter disabled)"""
+    return True  # Track everything
 
 def test_server_connection():
     """Test if server is reachable"""
@@ -59,12 +89,12 @@ def test_server_connection():
         return False
 
 def get_active_window_info():
-    """Get the currently active window title and process name (Windows only)"""
-    if platform.system() == "Windows":
+    """Get the currently active window title and process name (cross-platform)"""
+    
+    if IS_WINDOWS:
         try:
-            import win32gui
-            import win32process
-            import psutil
+            if win32gui is None:
+                return "Unknown", "Unknown"
             
             window = win32gui.GetForegroundWindow()
             title = win32gui.GetWindowText(window)
@@ -76,23 +106,66 @@ def get_active_window_info():
                 process_name = "Unknown"
                 
             return title, process_name
-        except ImportError:
-            print("Missing dependencies. Run: pip install pywin32 psutil")
-            return "Unknown", "Unknown"
         except Exception as e:
             return "Error", str(e)
+    
+    elif IS_MAC:
+        try:
+            if NSWorkspace is None:
+                return "Unknown", "Unknown"
+            
+            # Get the frontmost application
+            workspace = NSWorkspace.sharedWorkspace()
+            active_app = workspace.frontmostApplication()
+            app_name = active_app.localizedName() if active_app else "Unknown"
+            
+            # Get window title from Quartz
+            title = app_name  # Default to app name
+            try:
+                window_list = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID)
+                for window in window_list:
+                    if window.get('kCGWindowOwnerName') == app_name:
+                        window_title = window.get('kCGWindowName', '')
+                        if window_title:
+                            title = window_title
+                            break
+            except:
+                pass
+            
+            return title, app_name
+        except Exception as e:
+            return "Error", str(e)
+    
+    elif IS_LINUX:
+        # Linux support using xdotool (if installed)
+        try:
+            import subprocess
+            window_id = subprocess.check_output(['xdotool', 'getactivewindow']).decode().strip()
+            title = subprocess.check_output(['xdotool', 'getwindowname', window_id]).decode().strip()
+            pid = subprocess.check_output(['xdotool', 'getwindowpid', window_id]).decode().strip()
+            process_name = psutil.Process(int(pid)).name()
+            return title, process_name
+        except:
+            return "Unknown", "Unknown"
+    
     else:
-        return "Not supported OS", "Unknown"
+        return "Unsupported OS", "Unknown"
 
 def get_running_apps():
-    """Get list of all running application processes"""
+    """Get list of all running application processes (cross-platform)"""
     apps = set()
     try:
         for proc in psutil.process_iter(['name', 'pid']):
             try:
                 name = proc.info['name']
-                if name and name.endswith('.exe'):
-                    apps.add(name)
+                if name:
+                    if IS_WINDOWS and name.endswith('.exe'):
+                        apps.add(name)
+                    elif IS_MAC and not name.startswith('com.'):
+                        # Filter out system processes on Mac
+                        apps.add(name)
+                    elif IS_LINUX:
+                        apps.add(name)
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
     except Exception as e:
@@ -118,9 +191,13 @@ def send_session_event(app_name, process_name, event_type, end_reason=None):
         return False
 
 def send_activity(app_name, window_title):
-    """Send activity log to server"""
+    """Send activity log to server (only for dev apps)"""
     if not window_title:
         return True
+    
+    # Only track development-related apps
+    if not is_dev_app(app_name):
+        return True  # Skip silently
         
     data = {
         "username": USERNAME,
@@ -135,13 +212,15 @@ def send_activity(app_name, window_title):
         return False
 
 def track_sessions():
-    """Track which apps have started or stopped"""
+    """Track which dev apps have started or stopped"""
     global active_sessions
     
     current_apps = get_running_apps()
+    # Filter to only dev apps
+    current_dev_apps = {app for app in current_apps if is_dev_app(app)}
     
-    # Check for newly started apps
-    for app in current_apps:
+    # Check for newly started dev apps
+    for app in current_dev_apps:
         if app not in active_sessions:
             active_sessions[app] = {
                 "start_time": datetime.now(),
@@ -151,8 +230,8 @@ def track_sessions():
             if success:
                 print(f"[{time.strftime('%H:%M:%S')}] 🟢 STARTED: {app}")
     
-    # Check for closed apps
-    closed_apps = [app for app in active_sessions.keys() if app not in current_apps]
+    # Check for closed dev apps
+    closed_apps = [app for app in active_sessions.keys() if app not in current_dev_apps]
     for app in closed_apps:
         session = active_sessions.pop(app)
         duration = (datetime.now() - session["start_time"]).total_seconds()
@@ -201,6 +280,7 @@ def main():
         sys.exit(1)
 
     print(f"\n  👤 User: {USERNAME}")
+    print(f"  🖥️  OS: {platform.system()}")
     print(f"  🌐 Server: {SERVER_URL}")
     print(f"  ⏱️  Interval: {TRACKING_INTERVAL} seconds")
     print(f"  📱 Tracking: App Activity + Session Start/End")
@@ -228,20 +308,22 @@ def main():
     atexit.register(cleanup)
 
     print("="*70)
-    print("\n🚀 Tracker started! Press Ctrl+C to stop.\n")
+    print("\n🚀 Tracker started! Press Ctrl+C to stop.")
+    print("📌 Tracking all apps @ 30 sec interval\n")
 
     last_logged = None
     error_count = 0
     
     # Initialize with current running apps
     for app in get_running_apps():
-        active_sessions[app] = {
-            "start_time": datetime.now(),
-            "process_name": app
-        }
-        send_session_event(app, app, "start")
+        if is_dev_app(app):
+            active_sessions[app] = {
+                "start_time": datetime.now(),
+                "process_name": app
+            }
+            send_session_event(app, app, "start")
     
-    print(f"[{time.strftime('%H:%M:%S')}] Initialized with {len(active_sessions)} running apps\n")
+    print(f"[{time.strftime('%H:%M:%S')}] Initialized with {len(active_sessions)} dev apps\n")
 
     while True:
         try:
@@ -251,7 +333,7 @@ def main():
             # Track active window
             title, app_name = get_active_window_info()
             
-            if title and app_name:
+            if title and app_name and is_dev_app(app_name):
                 success = send_activity(app_name, title)
                 
                 current = f"{app_name}|{title[:30]}"

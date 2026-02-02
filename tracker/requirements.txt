@@ -1,7 +1,14 @@
 # WorkTracker Python Dependencies
 # Install with: pip install -r requirements.txt
 
+# Cross-platform
 requests>=2.31.0    # HTTP requests to backend API
-pywin32>=306        # Windows API for active window detection (Windows only)
 psutil>=5.9.0       # Process and system monitoring
+
+# Windows only (auto-skipped on Mac/Linux)
+pywin32>=306; sys_platform == 'win32'
+
+# Mac only (auto-skipped on Windows/Linux)
+pyobjc-framework-Cocoa>=9.0; sys_platform == 'darwin'
+pyobjc-framework-Quartz>=9.0; sys_platform == 'darwin'
 

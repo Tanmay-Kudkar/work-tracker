@@ -108,8 +108,12 @@ public class ActivityService {
         }
     }
 
+    // Each log entry represents 30 seconds of activity
+    private static final int SECONDS_PER_LOG = 30;
+
     private long calculateTotalActiveTime(List<ActivityLog> logs) {
-        return logs.size() / 60;
+        // Each log = 10 seconds, so total minutes = (logs * 10) / 60
+        return (logs.size() * SECONDS_PER_LOG) / 60;
     }
 
     private List<Map<String, Object>> getTopApplications(List<ActivityLog> logs) {
@@ -124,9 +128,10 @@ public class ActivityService {
                 .limit(10)
                 .map(entry -> {
                     Map<String, Object> app = new HashMap<>();
+                    long totalSeconds = entry.getValue() * SECONDS_PER_LOG;
                     app.put("name", entry.getKey());
-                    app.put("minutes", entry.getValue() / 60);
-                    app.put("seconds", entry.getValue() % 60);
+                    app.put("minutes", totalSeconds / 60);
+                    app.put("seconds", totalSeconds % 60);
                     app.put("percentage", logs.isEmpty() ? 0 : (entry.getValue() * 100.0 / logs.size()));
                     return app;
                 })
@@ -145,7 +150,7 @@ public class ActivityService {
             h.put("hour", hour);
             h.put("label", String.format("%02d:00", hour));
             long count = hourlyCount.getOrDefault(hour, 0L);
-            h.put("minutes", count / 60);
+            h.put("minutes", (count * SECONDS_PER_LOG) / 60);
             h.put("active", count > 0);
             hourly.add(h);
         }
@@ -168,7 +173,7 @@ public class ActivityService {
                 .map(entry -> {
                     Map<String, Object> cat = new HashMap<>();
                     cat.put("name", entry.getKey());
-                    cat.put("minutes", entry.getValue() / 60);
+                    cat.put("minutes", (entry.getValue() * SECONDS_PER_LOG) / 60);
                     cat.put("percentage", logs.isEmpty() ? 0 : (entry.getValue() * 100.0 / logs.size()));
                     cat.put("color", getCategoryColor(entry.getKey()));
                     return cat;
@@ -200,14 +205,14 @@ public class ActivityService {
                     cat.put("color", getCategoryColor(entry.getKey()));
 
                     long totalCount = entry.getValue().values().stream().mapToLong(Long::longValue).sum();
-                    cat.put("totalMinutes", (totalCount * 10) / 60);
+                    cat.put("totalMinutes", (totalCount * SECONDS_PER_LOG) / 60);
 
                     List<Map<String, Object>> apps = entry.getValue().entrySet().stream()
                             .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
                             .map(appEntry -> {
                                 Map<String, Object> a = new HashMap<>();
                                 a.put("name", appEntry.getKey());
-                                a.put("minutes", (appEntry.getValue() * 10) / 60);
+                                a.put("minutes", (appEntry.getValue() * SECONDS_PER_LOG) / 60);
                                 return a;
                             })
                             .collect(Collectors.toList());
