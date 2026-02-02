@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { BarChart, Bar, PieChart, Pie, Cell, 
          XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { useMembers, useDashboard, useCurrentTime } from './hooks'
@@ -37,6 +37,32 @@ function App() {
   const currentTime = useCurrentTime();
   const { members, loading: membersLoading, error: membersError, refetch: refetchMembers } = useMembers(selectedDate);
   const { dashboard, loading: dashboardLoading, error: dashboardError, refetch: refetchDashboard } = useDashboard(selectedMember, selectedDate);
+
+  // Auto-update date when day changes at midnight
+  useEffect(() => {
+    const checkDateChange = () => {
+      const today = new Date().toISOString().split('T')[0];
+      if (selectedDate !== today) {
+        // Only auto-update if the user was viewing today (not looking at past dates)
+        const selectedDateObj = new Date(selectedDate + 'T00:00:00');
+        const todayObj = new Date(today + 'T00:00:00');
+        const daysDiff = Math.floor((todayObj - selectedDateObj) / (1000 * 60 * 60 * 24));
+        
+        // Auto-update only if it was yesterday (user was viewing "today" before midnight)
+        if (daysDiff === 1) {
+          setSelectedDate(today);
+        }
+      }
+    };
+
+    // Check every minute for day change
+    const interval = setInterval(checkDateChange, 60000);
+    
+    // Also check immediately on mount
+    checkDateChange();
+
+    return () => clearInterval(interval);
+  }, [selectedDate]);
 
   const handleSync = async () => {
     setIsSyncing(true);

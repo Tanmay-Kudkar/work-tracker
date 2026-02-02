@@ -67,9 +67,11 @@ public class ActivityService {
     public List<MemberSummaryDto> getAllMembersSummary(LocalDate date, int tzOffsetMinutes) {
         LocalDateTime startOfDayUtc = localToUtc(date.atStartOfDay(), tzOffsetMinutes);
         LocalDateTime endOfDayUtc = localToUtc(date.atTime(LocalTime.MAX), tzOffsetMinutes);
+        LocalDateTime now = LocalDateTime.now();
+        boolean isToday = date.equals(LocalDate.now());
 
         return VALID_MEMBERS.stream()
-                .map(username -> createMemberSummary(username, startOfDayUtc, endOfDayUtc))
+                .map(username -> createMemberSummary(username, startOfDayUtc, endOfDayUtc, now, isToday))
                 .sorted(Comparator.comparing(MemberSummaryDto::getTotalActiveMinutes).reversed())
                 .collect(Collectors.toList());
     }
@@ -112,14 +114,25 @@ public class ActivityService {
         return utc.plusMinutes(tzOffsetMinutes);
     }
 
-    private MemberSummaryDto createMemberSummary(String username, LocalDateTime start, LocalDateTime end) {
+    private MemberSummaryDto createMemberSummary(String username, LocalDateTime start, LocalDateTime end,
+            LocalDateTime now, boolean isToday) {
         List<ActivityLog> logs = activityLogRepository
                 .findByUsernameAndTimestampBetweenOrderByTimestampAsc(username, start, end);
 
         long totalMinutes = calculateTotalActiveTime(logs);
         String currentApp = logs.isEmpty() ? null : logs.get(logs.size() - 1).getApplicationName();
-        boolean isActive = !logs.isEmpty() &&
-                Duration.between(logs.get(logs.size() - 1).getTimestamp(), LocalDateTime.now()).toMinutes() < 2;
+
+        // Check if user is currently active (regardless of selected date)
+        // Find the most recent activity log across all time (last 2 minutes for instant
+        // updates)
+        List<ActivityLog> recentLogs = activityLogRepository
+                .findByUsernameAndTimestampBetweenOrderByTimestampAsc(
+                        username,
+                        now.minusMinutes(2),
+                        now);
+
+        // User is active if they have any activity in the last 2 minutes
+        boolean isActive = !recentLogs.isEmpty();
 
         return MemberSummaryDto.builder()
                 .username(username)
@@ -127,7 +140,9 @@ public class ActivityService {
                 .totalActiveMinutes(totalMinutes)
                 .totalActiveHours(String.format("%.1f", totalMinutes / 60.0))
                 .isActive(isActive)
-                .currentApplication(isActive ? normalizeAppName(currentApp) : null)
+                .currentApplication(isActive ? normalizeAppName(
+                        recentLogs.isEmpty() ? null : recentLogs.get(recentLogs.size() - 1).getApplicationName())
+                        : null)
                 .topApp(getTopApp(logs))
                 .build();
     }

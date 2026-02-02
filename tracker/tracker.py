@@ -327,6 +327,12 @@ def main():
     print("\n🚀 Tracker started! Press Ctrl+C to stop.")
     print("📌 Tracking all apps @ 30 sec interval\n")
 
+    # Send immediate activity log to show online status instantly
+    title, app_name = get_active_window_info()
+    if title and app_name:
+        send_activity(app_name, title)
+        print(f"[{time.strftime('%H:%M:%S')}] 📡 Initial status sent: {app_name}")
+
     last_logged = None
     error_count = 0
     
