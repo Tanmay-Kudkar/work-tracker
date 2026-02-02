@@ -205,7 +205,8 @@ def send_activity(app_name, window_title):
     data = {
         "username": USERNAME,
         "applicationName": app_name,
-        "windowTitle": window_title
+        "windowTitle": window_title,
+        "timestamp": datetime.now().isoformat()
     }
     
     try:

@@ -38,11 +38,20 @@ public class ActivityService {
     public ActivityLog logActivity(ActivityLogRequest request) {
         validateMember(request.getUsername());
 
+        LocalDateTime timestamp = LocalDateTime.now();
+        if (request.getTimestamp() != null && !request.getTimestamp().isEmpty()) {
+            try {
+                timestamp = LocalDateTime.parse(request.getTimestamp());
+            } catch (Exception e) {
+                log.warn("Invalid timestamp format from client: {}, using server time", request.getTimestamp());
+            }
+        }
+
         ActivityLog activityLog = ActivityLog.builder()
                 .username(request.getUsername())
                 .applicationName(request.getApplicationName())
                 .windowTitle(request.getWindowTitle())
-                .timestamp(LocalDateTime.now())
+                .timestamp(timestamp)
                 .build();
 
         log.info("Logging activity for user: {}, app: {}",
