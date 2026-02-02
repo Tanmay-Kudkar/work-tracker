@@ -1,0 +1,27 @@
+# Dependencies
+*node_modules/
+
+# Build outputs
+backend/target/
+frontend/dist/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Python virtual environment
+.venv*/
+__pycache__/
+*.pyc
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Environment files
+.env
+.env.local

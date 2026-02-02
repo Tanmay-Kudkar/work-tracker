@@ -1,0 +1,7 @@
+# WorkTracker Python Dependencies
+# Install with: pip install -r requirements.txt
+
+requests>=2.31.0    # HTTP requests to backend API
+pywin32>=306        # Windows API for active window detection (Windows only)
+psutil>=5.9.0       # Process and system monitoring
+

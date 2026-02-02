@@ -1,0 +1,66 @@
+databases:
+  - name: worktracker-db
+    databaseName: worktracker
+    user: worktracker
+    plan: free
+    region: oregon
+
+services:
+  # Backend API Service
+  - type: web
+    name: worktracker-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    region: oregon
+    healthCheckPath: /api/activity/summary
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: worktracker-db
+          property: connectionString
+      - key: DATABASE_USERNAME
+        fromDatabase:
+          name: worktracker-db
+          property: user
+      - key: DATABASE_PASSWORD
+        fromDatabase:
+          name: worktracker-db
+          property: password
+      - key: H2_CONSOLE_ENABLED
+        value: "false"
+      - key: FRONTEND_URL
+        value: "*"  # Allow all origins, or specify: https://your-frontend.onrender.com
+      - key: PORT
+        value: "8080"
+
+  # Frontend Static Site
+  - type: web
+    name: worktracker-frontend
+    runtime: static
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: ./frontend/dist
+    plan: free
+    region: oregon
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          type: web
+          name: worktracker-api
+          envVarKey: RENDER_EXTERNAL_URL
+        transform: "${VITE_API_URL}/api/activity"
+      - key: VITE_SESSION_URL
+        fromService:
+          type: web
+          name: worktracker-api
+          envVarKey: RENDER_EXTERNAL_URL
+        transform: "${VITE_SESSION_URL}/api/sessions"
