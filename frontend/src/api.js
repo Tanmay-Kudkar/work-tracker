@@ -1,5 +1,6 @@
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8080/api/activity";
-const SESSION_URL = import.meta.env.VITE_SESSION_URL || "http://localhost:8080/api/sessions";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8080/api";
+const API_URL = `${API_BASE}/activity`;
+const SESSION_URL = import.meta.env.VITE_SESSION_URL || `${API_BASE}/sessions`;
 
 class ApiError extends Error {
   constructor(message, status, data = null) {
