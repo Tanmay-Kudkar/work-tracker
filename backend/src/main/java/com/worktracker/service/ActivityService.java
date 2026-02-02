@@ -52,23 +52,31 @@ public class ActivityService {
     }
 
     public List<MemberSummaryDto> getAllMembersSummary(LocalDate date) {
-        LocalDateTime startOfDay = date.atStartOfDay();
-        LocalDateTime endOfDay = date.atTime(LocalTime.MAX);
+        return getAllMembersSummary(date, 0);
+    }
+
+    public List<MemberSummaryDto> getAllMembersSummary(LocalDate date, int tzOffsetMinutes) {
+        LocalDateTime startOfDayUtc = localToUtc(date.atStartOfDay(), tzOffsetMinutes);
+        LocalDateTime endOfDayUtc = localToUtc(date.atTime(LocalTime.MAX), tzOffsetMinutes);
 
         return VALID_MEMBERS.stream()
-                .map(username -> createMemberSummary(username, startOfDay, endOfDay))
+                .map(username -> createMemberSummary(username, startOfDayUtc, endOfDayUtc))
                 .sorted(Comparator.comparing(MemberSummaryDto::getTotalActiveMinutes).reversed())
                 .collect(Collectors.toList());
     }
 
     public Map<String, Object> getDashboard(String username, LocalDate date) {
+        return getDashboard(username, date, 0);
+    }
+
+    public Map<String, Object> getDashboard(String username, LocalDate date, int tzOffsetMinutes) {
         validateMember(username);
 
-        LocalDateTime startOfDay = date.atStartOfDay();
-        LocalDateTime endOfDay = date.atTime(LocalTime.MAX);
+        LocalDateTime startOfDayUtc = localToUtc(date.atStartOfDay(), tzOffsetMinutes);
+        LocalDateTime endOfDayUtc = localToUtc(date.atTime(LocalTime.MAX), tzOffsetMinutes);
 
         List<ActivityLog> logs = activityLogRepository
-                .findByUsernameAndTimestampBetweenOrderByTimestampAsc(username, startOfDay, endOfDay);
+                .findByUsernameAndTimestampBetweenOrderByTimestampAsc(username, startOfDayUtc, endOfDayUtc);
 
         Map<String, Object> dashboard = new HashMap<>();
         dashboard.put("username", username);
@@ -76,10 +84,23 @@ public class ActivityService {
         dashboard.put("date", date.toString());
         dashboard.put("totalActiveMinutes", calculateTotalActiveTime(logs));
         dashboard.put("topApplications", getTopApplications(logs));
-        dashboard.put("hourlyActivity", getHourlyActivity(logs));
+        dashboard.put("hourlyActivity", getHourlyActivity(logs, tzOffsetMinutes));
         dashboard.put("categories", getCategoryBreakdown(logs));
 
         return dashboard;
+    }
+
+    /**
+     * Stored timestamps are treated as UTC LocalDateTime. Convert a local datetime
+     * (user/browser) to UTC.
+     * tzOffsetMinutes is the user's offset from UTC in minutes (e.g. IST = +330).
+     */
+    private static LocalDateTime localToUtc(LocalDateTime local, int tzOffsetMinutes) {
+        return local.minusMinutes(tzOffsetMinutes);
+    }
+
+    private static LocalDateTime utcToLocal(LocalDateTime utc, int tzOffsetMinutes) {
+        return utc.plusMinutes(tzOffsetMinutes);
     }
 
     private MemberSummaryDto createMemberSummary(String username, LocalDateTime start, LocalDateTime end) {
@@ -138,10 +159,10 @@ public class ActivityService {
                 .collect(Collectors.toList());
     }
 
-    private List<Map<String, Object>> getHourlyActivity(List<ActivityLog> logs) {
+    private List<Map<String, Object>> getHourlyActivity(List<ActivityLog> logs, int tzOffsetMinutes) {
         Map<Integer, Long> hourlyCount = logs.stream()
                 .collect(Collectors.groupingBy(
-                        log -> log.getTimestamp().getHour(),
+                        log -> utcToLocal(log.getTimestamp(), tzOffsetMinutes).getHour(),
                         Collectors.counting()));
 
         List<Map<String, Object>> hourly = new ArrayList<>();

@@ -172,22 +172,25 @@ def get_running_apps():
         pass
     return apps
 
-def send_session_event(app_name, process_name, event_type, end_reason=None):
-    """Send session start/end event to server"""
+def send_session_event(app_name, process_name, event_type, end_reason=None, timeoutSeconds=5):
+    """Send session start/end event to server.
+
+    Returns True if POST succeeded (status 200).
+    """
     data = {
         "username": USERNAME,
         "applicationName": app_name,
         "processName": process_name,
         "eventType": event_type
     }
-    
+
     if end_reason:
         data["endReason"] = end_reason
-    
+
     try:
-        response = requests.post(SESSION_URL, json=data, timeout=5)
+        response = requests.post(SESSION_URL, json=data, timeout=timeoutSeconds)
         return response.status_code == 200
-    except Exception as e:
+    except Exception:
         return False
 
 def send_activity(app_name, window_title):
@@ -224,9 +227,11 @@ def track_sessions():
         if app not in active_sessions:
             active_sessions[app] = {
                 "start_time": datetime.now(),
-                "process_name": app
+                "process_name": app,
+                "sent": False
             }
             success = send_session_event(app, app, "start")
+            active_sessions[app]["sent"] = bool(success)
             if success:
                 print(f"[{time.strftime('%H:%M:%S')}] 🟢 STARTED: {app}")
     
@@ -235,13 +240,15 @@ def track_sessions():
     for app in closed_apps:
         session = active_sessions.pop(app)
         duration = (datetime.now() - session["start_time"]).total_seconds()
-        
+
         # Determine end reason
         end_reason = "killed" if duration < 5 else "normal"
-        
-        success = send_session_event(app, app, "end", end_reason)
-        if success:
-            print(f"[{time.strftime('%H:%M:%S')}] 🔴 CLOSED: {app} ({end_reason}, {int(duration)}s)")
+
+        # Only send end if start was successfully sent earlier
+        if session.get("sent"):
+            success = send_session_event(app, app, "end", end_reason)
+            if success:
+                print(f"[{time.strftime('%H:%M:%S')}] 🔴 CLOSED: {app} ({end_reason}, {int(duration)}s)")
 
 def cleanup(signum=None, frame=None):
     """Cleanup function called on exit - close all active sessions"""
@@ -249,12 +256,20 @@ def cleanup(signum=None, frame=None):
     print("  Shutting down tracker...")
     print("=" * 60)
     
-    # Close all active sessions
+    # Close only the sessions for which a start event was sent.
+    total = len(active_sessions)
+    closed_sent = 0
     for app, session in active_sessions.items():
-        send_session_event(app, session["process_name"], "end", "system_shutdown")
-        print(f"  Closed session: {app}")
-    
-    print("  All sessions closed. Goodbye!")
+        if session.get("sent"):
+            # use short timeout to avoid long blocking shutdown
+            try:
+                send_session_event(app, session["process_name"], "end", "system_shutdown", timeoutSeconds=1)
+                closed_sent += 1
+            except Exception:
+                pass
+
+    print(f"  Closed session end events sent: {closed_sent}/{total}")
+    print("  Goodbye!")
     sys.exit(0)
 
 def main():
@@ -319,11 +334,14 @@ def main():
         if is_dev_app(app):
             active_sessions[app] = {
                 "start_time": datetime.now(),
-                "process_name": app
+                "process_name": app,
+                "sent": False
             }
-            send_session_event(app, app, "start")
+            success = send_session_event(app, app, "start")
+            active_sessions[app]["sent"] = bool(success)
     
-    print(f"[{time.strftime('%H:%M:%S')}] Initialized with {len(active_sessions)} dev apps\n")
+    sent_count = sum(1 for v in active_sessions.values() if v.get("sent"))
+    print(f"[{time.strftime('%H:%M:%S')}] Initialized with {len(active_sessions)} apps ({sent_count} started sent)\n")
 
     while True:
         try:

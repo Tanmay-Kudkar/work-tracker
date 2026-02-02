@@ -30,17 +30,28 @@ public class AnalyticsController {
     @GetMapping("/dashboard/{username}")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getDashboard(
             @PathVariable String username,
-            @RequestParam(required = false) String date) {
+            @RequestParam(required = false) String date,
+            @RequestParam(required = false, defaultValue = "0") int tzOffsetMinutes) {
         LocalDate targetDate = date != null ? LocalDate.parse(date) : LocalDate.now();
-        Map<String, Object> dashboard = activityService.getDashboard(username, targetDate);
+        Map<String, Object> dashboard = activityService.getDashboard(username, targetDate,
+                clampTzOffsetMinutes(tzOffsetMinutes));
         return ResponseEntity.ok(ApiResponse.success(dashboard));
     }
 
     @GetMapping("/summary")
     public ResponseEntity<ApiResponse<List<MemberSummaryDto>>> getAllMembersSummary(
-            @RequestParam(required = false) String date) {
+            @RequestParam(required = false) String date,
+            @RequestParam(required = false, defaultValue = "0") int tzOffsetMinutes) {
         LocalDate targetDate = date != null ? LocalDate.parse(date) : LocalDate.now();
-        List<MemberSummaryDto> summaries = activityService.getAllMembersSummary(targetDate);
+        List<MemberSummaryDto> summaries = activityService.getAllMembersSummary(targetDate,
+                clampTzOffsetMinutes(tzOffsetMinutes));
         return ResponseEntity.ok(ApiResponse.success(summaries));
+    }
+
+    private static int clampTzOffsetMinutes(int tzOffsetMinutes) {
+        // Keep in a sane range: UTC-14 to UTC+14
+        int min = -14 * 60;
+        int max = 14 * 60;
+        return Math.max(min, Math.min(max, tzOffsetMinutes));
     }
 }

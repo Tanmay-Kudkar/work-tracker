@@ -2,6 +2,11 @@ const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8080/api";
 const API_URL = `${API_BASE}/activity`;
 const SESSION_URL = import.meta.env.VITE_SESSION_URL || `${API_BASE}/sessions`;
 
+function getTzOffsetMinutes() {
+  // JS returns minutes *behind* UTC. We want minutes *ahead* of UTC (e.g., IST => +330).
+  return -new Date().getTimezoneOffset();
+}
+
 class ApiError extends Error {
   constructor(message, status, data = null) {
     super(message);
@@ -35,12 +40,14 @@ async function handleResponse(response) {
 
 export const api = {
   async getSummary(date) {
-    const response = await fetch(`${API_URL}/summary?date=${date}`);
+    const tzOffsetMinutes = getTzOffsetMinutes();
+    const response = await fetch(`${API_URL}/summary?date=${date}&tzOffsetMinutes=${tzOffsetMinutes}`);
     return handleResponse(response);
   },
 
   async getDashboard(username, date) {
-    const response = await fetch(`${API_URL}/dashboard/${username}?date=${date}`);
+    const tzOffsetMinutes = getTzOffsetMinutes();
+    const response = await fetch(`${API_URL}/dashboard/${username}?date=${date}&tzOffsetMinutes=${tzOffsetMinutes}`);
     return handleResponse(response);
   },
 

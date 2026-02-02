@@ -8,6 +8,26 @@ import './App.css'
 
 const COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#f97316', '#eab308', '#06b6d4', '#14b8a6'];
 
+const formatMinutes = (mins) => {
+  if (!mins) return "0m";
+  const hours = Math.floor(mins / 60);
+  const minutes = mins % 60;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+};
+
+const formatMinutesDetailed = (mins, seconds = 0) => {
+  if (mins == null) return "0m";
+  // allow secs passed separately (for topApplications)
+  let totalSeconds = Math.floor(mins) * 60 + Math.floor(seconds || 0);
+  if (totalSeconds < 0) totalSeconds = 0;
+  const h = Math.floor(totalSeconds / 3600);
+  totalSeconds = totalSeconds % 3600;
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${h}h ${m}m ${s}s`;
+};
+
 function App() {
   const [selectedMember, setSelectedMember] = useState(null);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -33,14 +53,6 @@ function App() {
     } finally {
       setIsSyncing(false);
     }
-  };
-
-  const formatMinutes = (mins) => {
-    if (!mins) return "0m";
-    const hours = Math.floor(mins / 60);
-    const minutes = mins % 60;
-    if (hours > 0) return `${hours}h ${minutes}m`;
-    return `${minutes}m`;
   };
 
   const getTimeOfDay = () => {
@@ -135,8 +147,8 @@ function App() {
                     </div>
                     <h3>{member.fullName}</h3>
                     <div className="time-display">
-                      <span className="time-value">{member.totalActiveHours || '0'}</span>
-                      <span className="time-label">hours today</span>
+                      <span className="time-value">{formatMinutesDetailed(member.totalActiveMinutes)}</span>
+                      <span className="time-label">of 24h</span>
                     </div>
                     {member.isActive && member.currentApplication && (
                       <div className="current-activity">
@@ -211,7 +223,7 @@ function App() {
                           }} 
                           labelStyle={{ color: '#1a202c', fontWeight: 600, marginBottom: '4px' }} 
                           itemStyle={{ color: '#4a5568', fontWeight: 500 }}
-                          formatter={(value) => [`${value} min`, 'Activity']} 
+                          formatter={(value) => [formatMinutesDetailed(value), 'Activity']} 
                         />
                         <Bar dataKey="minutes" radius={[8, 8, 0, 0]} maxBarSize={40}>
                           {dashboard.hourlyActivity.map((entry, index) => (
@@ -266,7 +278,7 @@ function SummaryTab({ dashboard }) {
               {dashboard.topApplications.slice(0, 6).map((app, idx) => (
                 <div key={idx} className="list-item" style={{ '--color': COLORS[idx % COLORS.length] }}>
                   <span className="item-name">{getAppIcon(app.name)} {app.name}</span>
-                  <span className="item-time">{app.minutes}m {app.seconds}s</span>
+                  <span className="item-time">{formatMinutesDetailed(app.minutes, app.seconds)}</span>
                   <div className="item-bar" style={{ width: `${app.percentage}%` }}></div>
                 </div>
               ))}
@@ -296,7 +308,7 @@ function SummaryTab({ dashboard }) {
               {dashboard.categories.categories.map((cat, idx) => (
                 <div key={idx} className="list-item" style={{ '--color': cat.color }}>
                   <span className="item-name">{getCategoryIcon(cat.name)} {cat.name}</span>
-                  <span className="item-time">{cat.minutes}m</span>
+                  <span className="item-time">{formatMinutesDetailed(cat.minutes)}</span>
                   <div className="item-bar" style={{ width: `${cat.percentage}%`, background: cat.color }}></div>
                 </div>
               ))}
@@ -321,13 +333,13 @@ function CategoryTree({ categories }) {
           <div key={idx} className="tree-category" style={{ '--color': cat.color }}>
             <div className="tree-header">
               <span>{getCategoryIcon(cat.category)} {cat.category}</span>
-              <span className="tree-time">{cat.totalMinutes}m</span>
+              <span className="tree-time">{formatMinutesDetailed(cat.totalMinutes)}</span>
             </div>
             <div className="tree-apps">
               {cat.applications?.slice(0, 5).map((app, appIdx) => (
                 <div key={appIdx} className="tree-app">
                   <span>└ {app.name}</span>
-                  <span>{app.minutes}m</span>
+                  <span>{formatMinutesDetailed(app.minutes)}</span>
                 </div>
               ))}
             </div>
@@ -408,16 +420,16 @@ function TimelineView({ members, loading, error, selectedDate, refetch }) {
     );
   }
 
-  // Sort members by total active time
+  // Sort members by total active time (minutes-based)
   const sortedMembers = [...members].sort((a, b) => {
-    const aHours = parseFloat(a.totalActiveHours) || 0;
-    const bHours = parseFloat(b.totalActiveHours) || 0;
-    return bHours - aHours;
+    const aMins = parseFloat(a.totalActiveMinutes) || 0;
+    const bMins = parseFloat(b.totalActiveMinutes) || 0;
+    return bMins - aMins;
   });
 
-  const totalTeamHours = sortedMembers.reduce((sum, member) => 
-    sum + (parseFloat(member.totalActiveHours) || 0), 0
-  ).toFixed(1);
+  const totalTeamMinutes = sortedMembers.reduce((sum, member) => 
+    sum + (parseFloat(member.totalActiveMinutes) || 0), 0
+  );
 
   return (
     <div className="timeline-container">
@@ -425,7 +437,7 @@ function TimelineView({ members, loading, error, selectedDate, refetch }) {
         <h2>📈 Team Timeline</h2>
         <p className="subtitle">
           {new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-          {` • Total team activity: ${totalTeamHours} hours`}
+          {` • Total team activity: ${formatMinutesDetailed(totalTeamMinutes)}`}
         </p>
       </div>
 
@@ -447,15 +459,15 @@ function TimelineView({ members, loading, error, selectedDate, refetch }) {
         <div className="stat-card-mini">
           <div className="stat-icon">⏱️</div>
           <div className="stat-content">
-            <div className="stat-label">Total Hours</div>
-            <div className="stat-value">{totalTeamHours}h</div>
+            <div className="stat-label">Total Activity</div>
+            <div className="stat-value">{formatMinutesDetailed(totalTeamMinutes)}</div>
           </div>
         </div>
         <div className="stat-card-mini">
           <div className="stat-icon">📊</div>
           <div className="stat-content">
             <div className="stat-label">Avg per Member</div>
-            <div className="stat-value">{(parseFloat(totalTeamHours) / members.length).toFixed(1)}h</div>
+            <div className="stat-value">{formatMinutesDetailed(totalTeamMinutes / Math.max(members.length, 1))}</div>
           </div>
         </div>
       </div>
@@ -475,13 +487,13 @@ function TimelineView({ members, loading, error, selectedDate, refetch }) {
             
             <div className="timeline-progress-section">
               <div className="timeline-hours">
-                <span className="hours-value">{member.totalActiveHours || '0'}</span>
-                <span className="hours-label">hours</span>
+                <span className="hours-value">{formatMinutesDetailed(member.totalActiveMinutes)}</span>
+                <span className="hours-label">today</span>
               </div>
               <div className="timeline-progress-bar">
                 <div 
                   className="timeline-progress-fill" 
-                  style={{ width: `${Math.min((parseFloat(member.totalActiveHours) || 0) * 10, 100)}%` }}
+                  style={{ width: `${Math.min(((parseFloat(member.totalActiveMinutes) || 0) / 60) * 10, 100)}%` }}
                 ></div>
               </div>
             </div>
