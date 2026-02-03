@@ -1,6 +1,7 @@
 package com.worktracker.controller;
 
 import com.worktracker.dto.ApiResponse;
+import com.worktracker.dto.SessionEventRequest;
 import com.worktracker.model.WorkSession;
 import com.worktracker.service.SessionService;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +16,12 @@ import java.util.Map;
 public class SessionController {
 
     private final SessionService sessionService;
+
+    // Session Event Tracking (for tracker.py)
+    @PostMapping
+    public ApiResponse<Map<String, String>> handleSessionEvent(@RequestBody SessionEventRequest request) {
+        return sessionService.processSessionEvent(request);
+    }
 
     // Work Session Tracking
     @PostMapping("/heartbeat")

@@ -1,12 +1,14 @@
 package com.worktracker.service;
 
 import com.worktracker.dto.ApiResponse;
+import com.worktracker.dto.SessionEventRequest;
 import com.worktracker.exception.InvalidMemberException;
 import com.worktracker.model.TeamMember;
 import com.worktracker.model.WorkSession;
 import com.worktracker.repository.TeamMemberRepository;
 import com.worktracker.repository.WorkSessionRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,6 +18,7 @@ import java.util.*;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class SessionService {
 
     private final WorkSessionRepository sessionRepository;
@@ -33,6 +36,61 @@ public class SessionService {
             "nidhish_vartak", "Nidhish Vartak",
             "atharva_raut", "Atharva Raut",
             "parth_waghe", "Parth Waghe");
+
+    @Transactional
+    public ApiResponse<Map<String, String>> processSessionEvent(SessionEventRequest request) {
+        if (request.getUsername() == null || !VALID_MEMBERS.contains(request.getUsername().toLowerCase())) {
+            throw new InvalidMemberException("Invalid team member: " + request.getUsername());
+        }
+
+        String eventType = request.getEventType().toLowerCase();
+        log.info("Processing session event: {} for {} - {}", eventType, request.getUsername(), request.getApplicationName());
+
+        TeamMember member = memberRepository.findByUsername(request.getUsername())
+                .orElseGet(() -> createMember(request.getUsername()));
+
+        switch (eventType) {
+            case "start":
+                handleSessionStart(member, request.getApplicationName());
+                break;
+            case "end":
+                handleSessionEnd(member, request.getApplicationName());
+                break;
+            case "heartbeat":
+                handleSessionHeartbeat(member, request.getApplicationName());
+                break;
+            default:
+                log.warn("Unknown event type: {}", eventType);
+        }
+
+        return ApiResponse.success(Map.of("status", "ok"));
+    }
+
+    private void handleSessionStart(TeamMember member, String appName) {
+        // Mark member as currently working
+        member.setIsCurrentlyWorking(true);
+        member.setCurrentApplication(normalizeAppName(appName));
+        memberRepository.save(member);
+        log.info("User {} started working on {}", member.getUsername(), appName);
+    }
+
+    private void handleSessionEnd(TeamMember member, String appName) {
+        // Mark member as not working
+        member.setIsCurrentlyWorking(false);
+        member.setCurrentApplication(null);
+        memberRepository.save(member);
+        log.info("User {} stopped working on {}", member.getUsername(), appName);
+    }
+
+    private void handleSessionHeartbeat(TeamMember member, String appName) {
+        // Update current application if needed
+        String normalizedApp = normalizeAppName(appName);
+        if (!normalizedApp.equals(member.getCurrentApplication())) {
+            member.setCurrentApplication(normalizedApp);
+        }
+        member.setIsCurrentlyWorking(true);
+        memberRepository.save(member);
+    }
 
     @Transactional
     public ApiResponse<Map<String, String>> processHeartbeat(String username, String appName) {
