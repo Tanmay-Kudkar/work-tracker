@@ -271,24 +271,26 @@ def track_sessions():
                 print(f"[{time.strftime('%H:%M:%S')}] 🔴 CLOSED: {app} ({end_reason}, {int(duration)}s)")
 
 def cleanup(signum=None, frame=None):
-    """Cleanup function called on exit - close all active sessions"""
+    """Cleanup function called on exit - close all active sessions quickly"""
     print("\n" + "=" * 60)
     print("  Shutting down tracker...")
     print("=" * 60)
     
-    # Close only the sessions for which a start event was sent.
-    total = len(active_sessions)
-    closed_sent = 0
-    for app, session in active_sessions.items():
-        if session.get("sent"):
-            # use short timeout to avoid long blocking shutdown
-            try:
-                send_session_event(app, session["process_name"], "end", "system_shutdown", timeoutSeconds=1)
-                closed_sent += 1
-            except Exception:
-                pass
-
-    print(f"  Closed session end events sent: {closed_sent}/{total}")
+    # Send a single "end" event to mark user as offline
+    # Use very short timeout for fast shutdown
+    try:
+        data = {
+            "username": USERNAME,
+            "applicationName": "tracker",
+            "processName": "tracker.py",
+            "eventType": "end",
+            "endReason": "system_shutdown"
+        }
+        requests.post(SESSION_URL, json=data, timeout=0.5)
+        print("  ✅ Sent offline status")
+    except Exception:
+        print("  ⚠ Could not send offline status (server unreachable)")
+    
     print("  Goodbye!")
     sys.exit(0)
 
