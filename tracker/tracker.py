@@ -4,6 +4,7 @@ import platform
 import os
 import sys
 import signal
+import atexit
 import psutil
 from datetime import datetime
 
@@ -46,6 +47,7 @@ TRACKING_INTERVAL = 30
 VALID_MEMBERS = ["tanmay_kudkar", "yash_thakur", "nidhish_vartak", "atharva_raut", "parth_waghe"]
 
 running = True
+logout_sent = False  # Track if we already sent logout
 
 def get_active_window():
     if IS_WINDOWS:
@@ -104,21 +106,36 @@ def send_activity(app_name, window_title):
 
 def send_logout():
     """Send logout signal to server so user shows offline immediately"""
+    global logout_sent
+    if logout_sent:
+        return True  # Already sent
     try:
         response = requests.post(LOGOUT_URL, json={"username": USERNAME}, timeout=2)
-        return response.status_code == 200
+        if response.status_code == 200:
+            logout_sent = True
+            return True
     except:
-        return False
+        pass
+    return False
+
+def cleanup():
+    """Called on ANY exit - normal, crash, or terminal close"""
+    global logout_sent
+    if not logout_sent and USERNAME:
+        print("\nSending offline signal...")
+        send_logout()
+
+# Register cleanup to run on ANY exit
+atexit.register(cleanup)
 
 def shutdown(signum=None, frame=None):
     global running
     running = False
     print("\nShutting down tracker...")
-    print("Sending offline signal...")
     if send_logout():
         print("Offline signal sent!")
     else:
-        print("Could not send offline signal (server may be slow)")
+        print("Could not send offline signal")
 
 def main():
     global running
