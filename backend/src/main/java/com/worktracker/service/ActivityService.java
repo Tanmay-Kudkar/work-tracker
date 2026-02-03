@@ -42,7 +42,6 @@ public class ActivityService {
         validateMember(request.getUsername());
 
         // Always use server time for consistent comparison
-        // This ensures isActive calculation works correctly regardless of client timezone
         LocalDateTime timestamp = LocalDateTime.now();
 
         ActivityLog activityLog = ActivityLog.builder()
@@ -51,6 +50,24 @@ public class ActivityService {
                 .windowTitle(request.getWindowTitle())
                 .timestamp(timestamp)
                 .build();
+
+        // Mark user as currently working (online) when activity is received
+        TeamMember member = teamMemberRepository.findByUsername(request.getUsername())
+                .orElseGet(() -> {
+                    TeamMember newMember = TeamMember.builder()
+                            .username(request.getUsername())
+                            .fullName(MEMBER_NAMES.getOrDefault(request.getUsername(), request.getUsername()))
+                            .totalWorkingMinutes(0L)
+                            .isCurrentlyWorking(true)
+                            .build();
+                    return teamMemberRepository.save(newMember);
+                });
+        
+        if (!Boolean.TRUE.equals(member.getIsCurrentlyWorking())) {
+            member.setIsCurrentlyWorking(true);
+            member.setCurrentApplication(request.getApplicationName());
+            teamMemberRepository.save(member);
+        }
 
         log.info("Logging activity for user: {}, app: {} at {}",
                 request.getUsername(), request.getApplicationName(), timestamp);
