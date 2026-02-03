@@ -30,6 +30,5 @@ public class ActivityLog {
 
     private String username;
     private String applicationName;
-    private String windowTitle;
     private LocalDateTime timestamp;
 }

@@ -15,6 +15,5 @@ public class ActivityLogRequest {
     private String username;
 
     private String applicationName;
-    private String windowTitle;
     private String timestamp; // Optional ISO 8601 timestamp from client
 }

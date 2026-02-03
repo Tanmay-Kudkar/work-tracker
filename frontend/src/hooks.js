@@ -72,6 +72,37 @@ export function useDashboard(username, selectedDate) {
   return { dashboard, loading, error, refetch: fetchDashboard };
 }
 
+export function useWeeklySummary(selectedDate) {
+  const [weeklySummary, setWeeklySummary] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const fetchWeeklySummary = useCallback(async () => {
+    try {
+      setError(null);
+      const data = await api.getWeeklySummary(selectedDate);
+      setWeeklySummary(data);
+    } catch (err) {
+      console.error("Error fetching weekly summary:", err);
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else {
+        setError("Failed to load weekly summary");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedDate]);
+
+  useEffect(() => {
+    fetchWeeklySummary();
+    const interval = setInterval(fetchWeeklySummary, 30000); // Refresh every 30 seconds
+    return () => clearInterval(interval);
+  }, [fetchWeeklySummary]);
+
+  return { weeklySummary, loading, error, refetch: fetchWeeklySummary };
+}
+
 export function useCurrentTime() {
   const [currentTime, setCurrentTime] = useState(new Date());
 

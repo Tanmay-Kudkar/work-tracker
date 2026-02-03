@@ -48,6 +48,16 @@ public class AnalyticsController {
         return ResponseEntity.ok(ApiResponse.success(summaries));
     }
 
+    @GetMapping("/weekly-summary")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getWeeklySummary(
+            @RequestParam(required = false) String date,
+            @RequestParam(required = false, defaultValue = "0") int tzOffsetMinutes) {
+        LocalDate targetDate = date != null ? LocalDate.parse(date) : LocalDate.now();
+        Map<String, Object> weeklySummary = activityService.getWeeklySummary(targetDate,
+                clampTzOffsetMinutes(tzOffsetMinutes));
+        return ResponseEntity.ok(ApiResponse.success(weeklySummary));
+    }
+
     private static int clampTzOffsetMinutes(int tzOffsetMinutes) {
         // Keep in a sane range: UTC-14 to UTC+14
         int min = -14 * 60;

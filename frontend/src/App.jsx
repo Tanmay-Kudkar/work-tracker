@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { BarChart, Bar, PieChart, Pie, Cell, 
          XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
-import { useMembers, useDashboard, useCurrentTime } from './hooks'
+import { useMembers, useDashboard, useCurrentTime, useWeeklySummary } from './hooks'
 import { SkeletonCard, SkeletonChart, SkeletonList } from './components/Skeleton'
 import { ErrorMessage, EmptyState } from './components/ErrorMessage'
 import './App.css'
@@ -9,11 +9,11 @@ import './App.css'
 const COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#f97316', '#eab308', '#06b6d4', '#14b8a6'];
 
 const formatMinutes = (mins) => {
-  if (!mins) return "0m";
-  const hours = Math.floor(mins / 60);
-  const minutes = mins % 60;
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  return `${minutes}m`;
+  if (mins == null) return "0h 0m";
+  const total = Number(mins) || 0;
+  const hours = Math.floor(total / 60);
+  const minutes = Math.floor(total % 60);
+  return `${hours}h ${minutes}m`;
 };
 
 const formatMinutesDetailed = (mins, seconds = 0) => {
@@ -33,10 +33,61 @@ function App() {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [activeTab, setActiveTab] = useState('summary');
   const [isSyncing, setIsSyncing] = useState(false);
+  const [memberTimestamps, setMemberTimestamps] = useState({});
+  const [currentSeconds, setCurrentSeconds] = useState(0);
   
   const currentTime = useCurrentTime();
   const { members, loading: membersLoading, error: membersError, refetch: refetchMembers } = useMembers(selectedDate);
   const { dashboard, loading: dashboardLoading, error: dashboardError, refetch: refetchDashboard } = useDashboard(selectedMember, selectedDate);
+
+  // Force re-render every second for live updates (optimized)
+  useEffect(() => {
+    let frameId;
+    let lastUpdate = Date.now();
+    
+    const update = () => {
+      const now = Date.now();
+      if (now - lastUpdate >= 1000) {
+        setCurrentSeconds(prev => prev + 1);
+        lastUpdate = now;
+      }
+      frameId = requestAnimationFrame(update);
+    };
+    
+    frameId = requestAnimationFrame(update);
+    return () => cancelAnimationFrame(frameId);
+  }, []);
+
+  // Track base time for each member when data updates
+  useEffect(() => {
+    if (!membersLoading && members.length > 0) {
+      const newTimestamps = {};
+      members.forEach(member => {
+        const key = `${member.username}_${member.totalActiveMinutes}`;
+        // Only update timestamp if this member's time actually changed
+        if (!memberTimestamps[key]) {
+          newTimestamps[key] = {
+            baseMinutes: member.totalActiveMinutes,
+            timestamp: Date.now()
+          };
+        } else {
+          newTimestamps[key] = memberTimestamps[key];
+        }
+      });
+      setMemberTimestamps(newTimestamps);
+    }
+  }, [members, membersLoading]);
+
+  // Calculate live seconds for a specific member
+  const getLiveSeconds = (member) => {
+    if (!member.isActive) return 0;
+    const key = `${member.username}_${member.totalActiveMinutes}`;
+    const memberData = memberTimestamps[key];
+    if (!memberData) return 0;
+    
+    const elapsed = Math.floor((Date.now() - memberData.timestamp) / 1000);
+    return elapsed;
+  };
 
   // Auto-update date when day changes at midnight (only if viewing today)
   useEffect(() => {
@@ -138,7 +189,15 @@ function App() {
       <main className="main">
         {activeTab === 'timeline' ? (
           /* Timeline View */
-          <TimelineView members={members} loading={membersLoading} error={membersError} selectedDate={selectedDate} refetch={refetchMembers} />
+          <TimelineView 
+            members={members} 
+            loading={membersLoading} 
+            error={membersError} 
+            selectedDate={selectedDate} 
+            refetch={refetchMembers} 
+            getLiveSeconds={getLiveSeconds} 
+            currentSeconds={currentSeconds} 
+          />
         ) : !selectedMember ? (
           /* Team Overview */
           <div className="team-overview">
@@ -176,15 +235,15 @@ function App() {
                     </div>
                     <h3>{member.fullName}</h3>
                     <div className="time-display">
-                      <span className="time-value">{formatMinutesDetailed(member.totalActiveMinutes)}</span>
+                      <span className="time-value">{formatMinutesDetailed(member.totalActiveMinutes, getLiveSeconds(member))}</span>
                       <span className="time-label">of 24h</span>
                     </div>
-                    {member.isActive && member.currentApplication && (
+                    {member.currentApplication && (
                       <div className="current-activity">
                         <span className="app-badge">🔵 {member.currentApplication}</span>
                       </div>
                     )}
-                    {member.topApp && !member.isActive && (
+                    {member.topApp && (
                       <p className="top-app">🏆 Top: {member.topApp}</p>
                     )}
                   </div>
@@ -412,7 +471,9 @@ function getCategoryIcon(category) {
   return icons[category] || '📦';
 }
 
-function TimelineView({ members, loading, error, selectedDate, refetch }) {
+function TimelineView({ members, loading, error, selectedDate, refetch, getLiveSeconds, currentSeconds }) {
+  const { weeklySummary, loading: weeklyLoading } = useWeeklySummary(selectedDate);
+  
   if (error) {
     return <ErrorMessage message={error} onRetry={refetch} />;
   }
@@ -460,13 +521,17 @@ function TimelineView({ members, loading, error, selectedDate, refetch }) {
     sum + (parseFloat(member.totalActiveMinutes) || 0), 0
   );
 
+  const totalActiveLiveSeconds = sortedMembers
+    .filter(m => m.isActive)
+    .reduce((sum, member) => sum + (getLiveSeconds ? getLiveSeconds(member) : 0), 0);
+
   return (
     <div className="timeline-container">
       <div className="page-header">
         <h2>📈 Team Timeline</h2>
         <p className="subtitle">
           {new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-          {` • Total team activity: ${formatMinutesDetailed(totalTeamMinutes)}`}
+          {` • Today's Total activity: ${formatMinutesDetailed(totalTeamMinutes, totalActiveLiveSeconds)}`}
         </p>
       </div>
 
@@ -488,15 +553,17 @@ function TimelineView({ members, loading, error, selectedDate, refetch }) {
         <div className="stat-card-mini">
           <div className="stat-icon">⏱️</div>
           <div className="stat-content">
-            <div className="stat-label">Total Activity</div>
-            <div className="stat-value">{formatMinutesDetailed(totalTeamMinutes)}</div>
+            <div className="stat-label">Today's Total Activity</div>
+            <div className="stat-value">{formatMinutesDetailed(totalTeamMinutes, totalActiveLiveSeconds)}</div>
           </div>
         </div>
         <div className="stat-card-mini">
           <div className="stat-icon">📊</div>
           <div className="stat-content">
-            <div className="stat-label">Avg per Member</div>
-            <div className="stat-value">{formatMinutesDetailed(totalTeamMinutes / Math.max(members.length, 1))}</div>
+            <div className="stat-label">Total Weekly Activity</div>
+            <div className="stat-value">
+              {weeklyLoading ? '...' : formatMinutes(weeklySummary?.totalWeeklyMinutes || 0)}
+            </div>
           </div>
         </div>
       </div>
@@ -516,7 +583,7 @@ function TimelineView({ members, loading, error, selectedDate, refetch }) {
             
             <div className="timeline-progress-section">
               <div className="timeline-hours">
-                <span className="hours-value">{formatMinutesDetailed(member.totalActiveMinutes)}</span>
+                <span className="hours-value">{formatMinutesDetailed(member.totalActiveMinutes, getLiveSeconds ? getLiveSeconds(member) : 0)}</span>
                 <span className="hours-label">today</span>
               </div>
               <div className="timeline-progress-bar">
@@ -527,7 +594,7 @@ function TimelineView({ members, loading, error, selectedDate, refetch }) {
               </div>
             </div>
 
-            {member.isActive && member.currentApplication && (
+            {member.currentApplication && (
               <div className="timeline-current-app">
                 <span className="app-icon">🔵</span>
                 <span className="app-name">Currently: {member.currentApplication}</span>

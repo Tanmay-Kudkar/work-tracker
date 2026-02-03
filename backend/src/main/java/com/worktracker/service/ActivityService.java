@@ -41,13 +41,12 @@ public class ActivityService {
     public ActivityLog logActivity(ActivityLogRequest request) {
         validateMember(request.getUsername());
 
-        // Always use server time for consistent comparison
-        LocalDateTime timestamp = LocalDateTime.now();
+        // Store as UTC to ensure consistent timezone handling
+        LocalDateTime timestamp = LocalDateTime.now(java.time.ZoneOffset.UTC);
 
         ActivityLog activityLog = ActivityLog.builder()
                 .username(request.getUsername())
                 .applicationName(request.getApplicationName())
-                .windowTitle(request.getWindowTitle())
                 .timestamp(timestamp)
                 .build();
 
@@ -62,7 +61,7 @@ public class ActivityService {
                             .build();
                     return teamMemberRepository.save(newMember);
                 });
-        
+
         if (!Boolean.TRUE.equals(member.getIsCurrentlyWorking())) {
             member.setIsCurrentlyWorking(true);
             member.setCurrentApplication(request.getApplicationName());
@@ -82,13 +81,14 @@ public class ActivityService {
     public List<MemberSummaryDto> getAllMembersSummary(LocalDate date, int tzOffsetMinutes) {
         LocalDateTime startOfDayUtc = localToUtc(date.atStartOfDay(), tzOffsetMinutes);
         LocalDateTime endOfDayUtc = localToUtc(date.atTime(LocalTime.MAX), tzOffsetMinutes);
-        LocalDateTime now = LocalDateTime.now();
-        boolean isToday = date.equals(LocalDate.now());
+        // Use UTC 'now' for recent activity checks to match stored UTC timestamps
+        LocalDateTime nowUtc = LocalDateTime.now(java.time.ZoneOffset.UTC);
+        boolean isToday = date.equals(LocalDate.now(java.time.ZoneOffset.UTC));
 
         return VALID_MEMBERS.stream()
-                .map(username -> createMemberSummary(username, startOfDayUtc, endOfDayUtc, now, isToday))
-                .sorted(Comparator.comparing(MemberSummaryDto::getTotalActiveMinutes).reversed())
-                .collect(Collectors.toList());
+            .map(username -> createMemberSummary(username, startOfDayUtc, endOfDayUtc, nowUtc, isToday))
+            .sorted(Comparator.comparing(MemberSummaryDto::getTotalActiveMinutes).reversed())
+            .collect(Collectors.toList());
     }
 
     public Map<String, Object> getDashboard(String username, LocalDate date) {
@@ -116,7 +116,37 @@ public class ActivityService {
         return dashboard;
     }
 
+    public Map<String, Object> getWeeklySummary(LocalDate endDate, int tzOffsetMinutes) {
+        LocalDate startDate = endDate.minusDays(6); // Last 7 days including endDate
+
+        LocalDateTime startOfWeekUtc = localToUtc(startDate.atStartOfDay(), tzOffsetMinutes);
+        LocalDateTime endOfWeekUtc = localToUtc(endDate.atTime(LocalTime.MAX), tzOffsetMinutes);
+
+        long totalWeeklyMinutes = 0;
+        for (String username : VALID_MEMBERS) {
+            List<ActivityLog> logs = activityLogRepository
+                    .findByUsernameAndTimestampBetweenOrderByTimestampAsc(username, startOfWeekUtc, endOfWeekUtc);
+            totalWeeklyMinutes += calculateTotalActiveTime(logs);
+        }
+
+        Map<String, Object> weeklySummary = new HashMap<>();
+        weeklySummary.put("totalWeeklyMinutes", totalWeeklyMinutes);
+        weeklySummary.put("startDate", startDate.toString());
+        weeklySummary.put("endDate", endDate.toString());
+
+        return weeklySummary;
+    }
+
     /**
+     * dashboard.put("totalActiveMinutes", calculateTotalActiveTime(logs));
+     * dashboard.put("topApplications", getTopApplications(logs));
+     * dashboard.put("hourlyActivity", getHourlyActivity(logs, tzOffsetMinutes));
+     * dashboard.put("categories", getCategoryBreakdown(logs));
+     * 
+     * return dashboard;
+     * }
+     * 
+     * /**
      * Stored timestamps are treated as UTC LocalDateTime. Convert a local datetime
      * (user/browser) to UTC.
      * tzOffsetMinutes is the user's offset from UTC in minutes (e.g. IST = +330).
@@ -136,26 +166,27 @@ public class ActivityService {
 
         long totalMinutes = calculateTotalActiveTime(logs);
 
-        // First check if user explicitly logged out (isCurrentlyWorking = false in TeamMember)
+        // First check if user explicitly logged out (isCurrentlyWorking = false in
+        // TeamMember)
         Optional<TeamMember> memberOpt = teamMemberRepository.findByUsername(username);
-        boolean explicitlyLoggedOut = memberOpt.isPresent() && 
-                                       Boolean.FALSE.equals(memberOpt.get().getIsCurrentlyWorking());
-        
+        boolean explicitlyLoggedOut = memberOpt.isPresent() &&
+                Boolean.FALSE.equals(memberOpt.get().getIsCurrentlyWorking());
+
         boolean isActive = false;
         String currentApp = null;
-        
+
         if (!explicitlyLoggedOut) {
             // Only check recent activity if not explicitly logged out
             // Look for any activity in the last 2 minutes (tracker sends every 30 sec)
-            LocalDateTime twoMinutesAgo = LocalDateTime.now().minusMinutes(2);
+            LocalDateTime twoMinutesAgo = now.minusMinutes(2);
             List<ActivityLog> recentLogs = activityLogRepository
                     .findByUsernameAndTimestampBetweenOrderByTimestampAsc(
                             username,
                             twoMinutesAgo,
-                            LocalDateTime.now().plusMinutes(1));
+                            now.plusMinutes(1));
 
             isActive = !recentLogs.isEmpty();
-            
+
             if (isActive && !recentLogs.isEmpty()) {
                 ActivityLog mostRecent = recentLogs.get(recentLogs.size() - 1);
                 currentApp = normalizeAppName(mostRecent.getApplicationName());
@@ -233,7 +264,7 @@ public class ActivityService {
 
         for (ActivityLog log : logs) {
             String app = log.getApplicationName() != null ? log.getApplicationName().toLowerCase() : "";
-            String title = log.getWindowTitle() != null ? log.getWindowTitle().toLowerCase() : "";
+            String title = ""; // windowTitle removed
             String category = categorizeActivity(app, title);
             categories.merge(category, 1L, Long::sum);
         }
@@ -261,7 +292,7 @@ public class ActivityService {
 
         for (ActivityLog log : logs) {
             String app = log.getApplicationName() != null ? log.getApplicationName().toLowerCase() : "";
-            String title = log.getWindowTitle() != null ? log.getWindowTitle() : "";
+            String title = ""; // windowTitle removed
             String category = categorizeActivity(app, title);
             String normalizedApp = normalizeAppName(log.getApplicationName());
 
