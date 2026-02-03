@@ -30,9 +30,15 @@ elif IS_MAC:
             kCGWindowListOptionOnScreenOnly,
             kCGNullWindowID
         )
+        print("✅ Mac dependencies loaded successfully")
     except ImportError:
         print("⚠️  Missing Mac dependencies. Run: pip install pyobjc-framework-Cocoa pyobjc-framework-Quartz")
         NSWorkspace = None
+        CGWindowListCopyWindowInfo = None
+    
+    # Mac requires accessibility permissions
+    print("📋 Mac Note: If tracking doesn't work, grant Terminal/Python accessibility permissions:")
+    print("   System Settings → Privacy & Security → Accessibility → Add Terminal/Python")
 
 # ============================================
 # Configuration
@@ -112,28 +118,38 @@ def get_active_window_info():
     elif IS_MAC:
         try:
             if NSWorkspace is None:
+                print("[DEBUG] NSWorkspace is None - pyobjc not installed properly")
                 return "Unknown", "Unknown"
             
             # Get the frontmost application
             workspace = NSWorkspace.sharedWorkspace()
             active_app = workspace.frontmostApplication()
+            
+            if active_app is None:
+                print("[DEBUG] No frontmost application found - check accessibility permissions")
+                return "Unknown", "Unknown"
+                
             app_name = active_app.localizedName() if active_app else "Unknown"
             
             # Get window title from Quartz
             title = app_name  # Default to app name
             try:
-                window_list = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID)
-                for window in window_list:
-                    if window.get('kCGWindowOwnerName') == app_name:
-                        window_title = window.get('kCGWindowName', '')
-                        if window_title:
-                            title = window_title
-                            break
-            except:
+                if CGWindowListCopyWindowInfo is not None:
+                    window_list = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID)
+                    if window_list:
+                        for window in window_list:
+                            if window.get('kCGWindowOwnerName') == app_name:
+                                window_title = window.get('kCGWindowName', '')
+                                if window_title:
+                                    title = window_title
+                                    break
+            except Exception as e:
+                print(f"[DEBUG] Error getting window title: {e}")
                 pass
             
             return title, app_name
         except Exception as e:
+            print(f"[DEBUG] Mac get_active_window_info error: {e}")
             return "Error", str(e)
     
     elif IS_LINUX:
@@ -211,8 +227,11 @@ def send_activity(app_name, window_title):
     
     try:
         response = requests.post(ACTIVITY_URL, json=data, timeout=5)
+        if response.status_code != 200:
+            print(f"[DEBUG] Activity POST failed with status {response.status_code}: {response.text[:100]}")
         return response.status_code == 200
     except Exception as e:
+        print(f"[DEBUG] Activity POST exception: {e}")
         return False
 
 def track_sessions():
@@ -350,15 +369,23 @@ def main():
     sent_count = sum(1 for v in active_sessions.values() if v.get("sent"))
     print(f"[{time.strftime('%H:%M:%S')}] Initialized with {len(active_sessions)} apps ({sent_count} started sent)\n")
 
+    loop_count = 0
     while True:
         try:
+            loop_count += 1
+            
             # Track session changes (app starts/stops)
             track_sessions()
             
             # Track active window
             title, app_name = get_active_window_info()
             
-            if title and app_name and is_dev_app(app_name):
+            # Debug output every 10 loops (5 minutes at 30 sec interval)
+            if loop_count % 10 == 0:
+                print(f"[{time.strftime('%H:%M:%S')}] 🔄 Heartbeat #{loop_count} - Current: {app_name}")
+            
+            # Send activity if we have valid data
+            if title and app_name and app_name not in ("Unknown", "Error") and is_dev_app(app_name):
                 success = send_activity(app_name, title)
                 
                 current = f"{app_name}|{title[:30]}"
@@ -372,6 +399,10 @@ def main():
                             print(f"[{time.strftime('%H:%M:%S')}] ⚠ Connection error (attempt {error_count}/3)")
                     
                     last_logged = current
+            elif app_name in ("Unknown", "Error"):
+                # Only log this occasionally to avoid spam
+                if loop_count % 10 == 1:
+                    print(f"[{time.strftime('%H:%M:%S')}] ⚠ Cannot get active window - check permissions")
             
             time.sleep(TRACKING_INTERVAL)
             

@@ -38,14 +38,9 @@ public class ActivityService {
     public ActivityLog logActivity(ActivityLogRequest request) {
         validateMember(request.getUsername());
 
+        // Always use server time for consistent comparison
+        // This ensures isActive calculation works correctly regardless of client timezone
         LocalDateTime timestamp = LocalDateTime.now();
-        if (request.getTimestamp() != null && !request.getTimestamp().isEmpty()) {
-            try {
-                timestamp = LocalDateTime.parse(request.getTimestamp());
-            } catch (Exception e) {
-                log.warn("Invalid timestamp format from client: {}, using server time", request.getTimestamp());
-            }
-        }
 
         ActivityLog activityLog = ActivityLog.builder()
                 .username(request.getUsername())
@@ -54,8 +49,8 @@ public class ActivityService {
                 .timestamp(timestamp)
                 .build();
 
-        log.info("Logging activity for user: {}, app: {}",
-                request.getUsername(), request.getApplicationName());
+        log.info("Logging activity for user: {}, app: {} at {}",
+                request.getUsername(), request.getApplicationName(), timestamp);
 
         return activityLogRepository.save(activityLog);
     }
@@ -120,26 +115,23 @@ public class ActivityService {
                 .findByUsernameAndTimestampBetweenOrderByTimestampAsc(username, start, end);
 
         long totalMinutes = calculateTotalActiveTime(logs);
-        String currentApp = logs.isEmpty() ? null : logs.get(logs.size() - 1).getApplicationName();
 
         // Check if user is currently active by finding their most recent activity
-        // Note: We compare against all logs to find the absolute most recent one
-        List<ActivityLog> allUserLogs = activityLogRepository
+        // Look for any activity in the last 5 minutes (since tracker sends every 30 sec)
+        LocalDateTime fiveMinutesAgo = LocalDateTime.now().minusMinutes(5);
+        List<ActivityLog> recentLogs = activityLogRepository
                 .findByUsernameAndTimestampBetweenOrderByTimestampAsc(
                         username,
-                        LocalDateTime.now().minusHours(1), // Look back 1 hour to be safe
-                        LocalDateTime.now().plusHours(1)); // Look forward 1 hour for timezone issues
+                        fiveMinutesAgo,
+                        LocalDateTime.now().plusMinutes(1)); // Small buffer for clock skew
 
-        boolean isActive = false;
-        if (!allUserLogs.isEmpty()) {
-            // Get the most recent log
-            ActivityLog mostRecent = allUserLogs.get(allUserLogs.size() - 1);
-            // Consider active if most recent activity is within 2 minutes from now
-            // Use current system time to compare
-            long minutesSinceLastActivity = java.time.Duration.between(
-                    mostRecent.getTimestamp(),
-                    LocalDateTime.now()).abs().toMinutes();
-            isActive = minutesSinceLastActivity < 2;
+        boolean isActive = !recentLogs.isEmpty();
+        String currentApp = null;
+        
+        if (isActive && !recentLogs.isEmpty()) {
+            // Get the most recent log's application
+            ActivityLog mostRecent = recentLogs.get(recentLogs.size() - 1);
+            currentApp = normalizeAppName(mostRecent.getApplicationName());
         }
 
         return MemberSummaryDto.builder()
@@ -148,9 +140,7 @@ public class ActivityService {
                 .totalActiveMinutes(totalMinutes)
                 .totalActiveHours(String.format("%.1f", totalMinutes / 60.0))
                 .isActive(isActive)
-                .currentApplication(isActive && !allUserLogs.isEmpty()
-                        ? normalizeAppName(allUserLogs.get(allUserLogs.size() - 1).getApplicationName())
-                        : null)
+                .currentApplication(currentApp)
                 .topApp(getTopApp(logs))
                 .build();
     }
