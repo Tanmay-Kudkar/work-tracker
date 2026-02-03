@@ -4,7 +4,9 @@ import com.worktracker.dto.ActivityLogRequest;
 import com.worktracker.dto.MemberSummaryDto;
 import com.worktracker.exception.InvalidMemberException;
 import com.worktracker.model.ActivityLog;
+import com.worktracker.model.TeamMember;
 import com.worktracker.repository.ActivityLogRepository;
+import com.worktracker.repository.TeamMemberRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -23,6 +25,7 @@ import java.util.stream.Collectors;
 public class ActivityService {
 
     private final ActivityLogRepository activityLogRepository;
+    private final TeamMemberRepository teamMemberRepository;
 
     private static final Set<String> VALID_MEMBERS = Set.of(
             "tanmay_kudkar", "yash_thakur", "nidhish_vartak", "atharva_raut", "parth_waghe");
@@ -116,22 +119,30 @@ public class ActivityService {
 
         long totalMinutes = calculateTotalActiveTime(logs);
 
-        // Check if user is currently active by finding their most recent activity
-        // Look for any activity in the last 5 minutes (since tracker sends every 30 sec)
-        LocalDateTime fiveMinutesAgo = LocalDateTime.now().minusMinutes(5);
-        List<ActivityLog> recentLogs = activityLogRepository
-                .findByUsernameAndTimestampBetweenOrderByTimestampAsc(
-                        username,
-                        fiveMinutesAgo,
-                        LocalDateTime.now().plusMinutes(1)); // Small buffer for clock skew
-
-        boolean isActive = !recentLogs.isEmpty();
+        // First check if user explicitly logged out (isCurrentlyWorking = false in TeamMember)
+        Optional<TeamMember> memberOpt = teamMemberRepository.findByUsername(username);
+        boolean explicitlyLoggedOut = memberOpt.isPresent() && 
+                                       Boolean.FALSE.equals(memberOpt.get().getIsCurrentlyWorking());
+        
+        boolean isActive = false;
         String currentApp = null;
         
-        if (isActive && !recentLogs.isEmpty()) {
-            // Get the most recent log's application
-            ActivityLog mostRecent = recentLogs.get(recentLogs.size() - 1);
-            currentApp = normalizeAppName(mostRecent.getApplicationName());
+        if (!explicitlyLoggedOut) {
+            // Only check recent activity if not explicitly logged out
+            // Look for any activity in the last 2 minutes (tracker sends every 30 sec)
+            LocalDateTime twoMinutesAgo = LocalDateTime.now().minusMinutes(2);
+            List<ActivityLog> recentLogs = activityLogRepository
+                    .findByUsernameAndTimestampBetweenOrderByTimestampAsc(
+                            username,
+                            twoMinutesAgo,
+                            LocalDateTime.now().plusMinutes(1));
+
+            isActive = !recentLogs.isEmpty();
+            
+            if (isActive && !recentLogs.isEmpty()) {
+                ActivityLog mostRecent = recentLogs.get(recentLogs.size() - 1);
+                currentApp = normalizeAppName(mostRecent.getApplicationName());
+            }
         }
 
         return MemberSummaryDto.builder()

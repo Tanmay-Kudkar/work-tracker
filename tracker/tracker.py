@@ -39,6 +39,7 @@ else:
     print("Running in DEVELOPMENT mode")
 
 ACTIVITY_URL = f"{SERVER_URL}/activity"
+LOGOUT_URL = f"{SERVER_URL}/sessions/logout"
 USERNAME = os.environ.get("TRACKER_USER", "")
 TRACKING_INTERVAL = 30
 
@@ -58,12 +59,32 @@ def get_active_window():
             return None, None
     elif IS_MAC:
         try:
+            # Method 1: Get frontmost application using NSWorkspace
             workspace = NSWorkspace.sharedWorkspace()
             active_app = workspace.frontmostApplication()
+            
             if active_app:
                 app_name = active_app.localizedName()
+                bundle_id = active_app.bundleIdentifier() or ""
+                
+                # Skip Terminal if we're checking from Terminal - try to get window info
+                # Use Quartz to get the actual frontmost window
+                window_list = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID)
+                
+                for window in window_list:
+                    # Get the window that's in front (layer 0 is usually the frontmost)
+                    if window.get('kCGWindowLayer', 0) == 0:
+                        owner_name = window.get('kCGWindowOwnerName', '')
+                        window_title = window.get('kCGWindowName', '')
+                        
+                        # Skip system windows and menu bar
+                        if owner_name and owner_name not in ['Window Server', 'SystemUIServer']:
+                            return window_title or owner_name, owner_name
+                
+                # Fallback to NSWorkspace result
                 return app_name, app_name
-        except:
+        except Exception as e:
+            print(f"    Mac window detection error: {e}")
             pass
         return None, None
     return None, None
@@ -81,10 +102,23 @@ def send_activity(app_name, window_title):
         print(f"    Error: {e}")
         return False
 
+def send_logout():
+    """Send logout signal to server so user shows offline immediately"""
+    try:
+        response = requests.post(LOGOUT_URL, json={"username": USERNAME}, timeout=2)
+        return response.status_code == 200
+    except:
+        return False
+
 def shutdown(signum=None, frame=None):
     global running
     running = False
     print("\nShutting down tracker...")
+    print("Sending offline signal...")
+    if send_logout():
+        print("Offline signal sent!")
+    else:
+        print("Could not send offline signal (server may be slow)")
 
 def main():
     global running
