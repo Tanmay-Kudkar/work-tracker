@@ -3,7 +3,6 @@ import requests
 import platform
 import os
 import sys
-import atexit
 import signal
 import psutil
 from datetime import datetime
@@ -19,400 +18,130 @@ if IS_WINDOWS:
         import win32gui
         import win32process
     except ImportError:
-        print("⚠️  Missing Windows dependencies. Run: pip install pywin32")
-        win32gui = None
-        win32process = None
+        print("Missing Windows dependencies. Run: pip install pywin32")
+        sys.exit(1)
 elif IS_MAC:
     try:
         from AppKit import NSWorkspace
-        from Quartz import (
-            CGWindowListCopyWindowInfo,
-            kCGWindowListOptionOnScreenOnly,
-            kCGNullWindowID
-        )
-        print("✅ Mac dependencies loaded successfully")
+        from Quartz import CGWindowListCopyWindowInfo, kCGWindowListOptionOnScreenOnly, kCGNullWindowID
     except ImportError:
-        print("⚠️  Missing Mac dependencies. Run: pip install pyobjc-framework-Cocoa pyobjc-framework-Quartz")
-        NSWorkspace = None
-        CGWindowListCopyWindowInfo = None
-    
-    # Mac requires accessibility permissions
-    print("📋 Mac Note: If tracking doesn't work, grant Terminal/Python accessibility permissions:")
-    print("   System Settings → Privacy & Security → Accessibility → Add Terminal/Python")
+        print("Missing Mac dependencies. Run: pip install pyobjc-framework-Cocoa pyobjc-framework-Quartz")
+        sys.exit(1)
 
-# ============================================
 # Configuration
-# ============================================
+ENVIRONMENT = os.environ.get("TRACKER_ENV", "production")
 
-# Environment - set to 'production' to use deployed API
-ENVIRONMENT = os.environ.get("TRACKER_ENV", "development")  # 'development' or 'production'
-
-# Server URLs
 if ENVIRONMENT == "production":
-    # Your Render.com backend URL
-    SERVER_URL = os.environ.get("TRACKER_SERVER", "https://work-tracker-backend-3pts.onrender.com/api")
-    print("🌐 Running in PRODUCTION mode")
+    SERVER_URL = "https://work-tracker-backend-3pts.onrender.com/api"
+    print("Running in PRODUCTION mode")
 else:
-    # Local development
-    SERVER_URL = os.environ.get("TRACKER_SERVER", "http://localhost:8080/api")
-    print("💻 Running in DEVELOPMENT mode")
+    SERVER_URL = "http://localhost:8080/api"
+    print("Running in DEVELOPMENT mode")
 
 ACTIVITY_URL = f"{SERVER_URL}/activity"
-SESSION_URL = f"{SERVER_URL}/sessions"
-
-# Team member username - REQUIRED
-# Set via: $env:TRACKER_USER = "your_username"
 USERNAME = os.environ.get("TRACKER_USER", "")
+TRACKING_INTERVAL = 30
 
-# Valid team member usernames
-VALID_MEMBERS = [
-    "tanmay_kudkar",
-    "yash_thakur", 
-    "nidhish_vartak",
-    "atharva_raut",
-    "parth_waghe"
-]
+VALID_MEMBERS = ["tanmay_kudkar", "yash_thakur", "nidhish_vartak", "atharva_raut", "parth_waghe"]
 
-# Tracking interval (seconds) - 30 sec for optimal storage savings
-TRACKING_INTERVAL = int(os.environ.get("TRACKER_INTERVAL", "30"))
+running = True
 
-# Track active sessions
-active_sessions = {}  # {app_name: {"start_time": datetime, "process_name": str}}
-
-def is_dev_app(app_name):
-    """Track all apps (filter disabled)"""
-    return True  # Track everything
-
-def test_server_connection():
-    """Test if server is reachable"""
-    try:
-        response = requests.get(f"{SERVER_URL}/activity/summary?date={datetime.now().strftime('%Y-%m-%d')}", timeout=10)
-        return response.status_code in [200, 404]  # 404 is ok if no data yet
-    except requests.exceptions.ConnectionError:
-        return False
-    except Exception as e:
-        print(f"Connection test error: {str(e)}")
-        return False
-
-def get_active_window_info():
-    """Get the currently active window title and process name (cross-platform)"""
-    
+def get_active_window():
     if IS_WINDOWS:
         try:
-            if win32gui is None:
-                return "Unknown", "Unknown"
-            
             window = win32gui.GetForegroundWindow()
             title = win32gui.GetWindowText(window)
-            tid, pid = win32process.GetWindowThreadProcessId(window)
-            
-            try:
-                process_name = psutil.Process(pid).name()
-            except:
-                process_name = "Unknown"
-                
-            return title, process_name
-        except Exception as e:
-            return "Error", str(e)
-    
-    elif IS_MAC:
-        try:
-            if NSWorkspace is None:
-                print("[DEBUG] NSWorkspace is None - pyobjc not installed properly")
-                return "Unknown", "Unknown"
-            
-            # Get the frontmost application
-            workspace = NSWorkspace.sharedWorkspace()
-            active_app = workspace.frontmostApplication()
-            
-            if active_app is None:
-                print("[DEBUG] No frontmost application found - check accessibility permissions")
-                return "Unknown", "Unknown"
-                
-            app_name = active_app.localizedName() if active_app else "Unknown"
-            
-            # Get window title from Quartz
-            title = app_name  # Default to app name
-            try:
-                if CGWindowListCopyWindowInfo is not None:
-                    window_list = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID)
-                    if window_list:
-                        for window in window_list:
-                            if window.get('kCGWindowOwnerName') == app_name:
-                                window_title = window.get('kCGWindowName', '')
-                                if window_title:
-                                    title = window_title
-                                    break
-            except Exception as e:
-                print(f"[DEBUG] Error getting window title: {e}")
-                pass
-            
-            return title, app_name
-        except Exception as e:
-            print(f"[DEBUG] Mac get_active_window_info error: {e}")
-            return "Error", str(e)
-    
-    elif IS_LINUX:
-        # Linux support using xdotool (if installed)
-        try:
-            import subprocess
-            window_id = subprocess.check_output(['xdotool', 'getactivewindow']).decode().strip()
-            title = subprocess.check_output(['xdotool', 'getwindowname', window_id]).decode().strip()
-            pid = subprocess.check_output(['xdotool', 'getwindowpid', window_id]).decode().strip()
-            process_name = psutil.Process(int(pid)).name()
+            _, pid = win32process.GetWindowThreadProcessId(window)
+            process_name = psutil.Process(pid).name()
             return title, process_name
         except:
-            return "Unknown", "Unknown"
-    
-    else:
-        return "Unsupported OS", "Unknown"
-
-def get_running_apps():
-    """Get list of all running application processes (cross-platform)"""
-    apps = set()
-    try:
-        for proc in psutil.process_iter(['name', 'pid']):
-            try:
-                name = proc.info['name']
-                if name:
-                    if IS_WINDOWS and name.endswith('.exe'):
-                        apps.add(name)
-                    elif IS_MAC and not name.startswith('com.'):
-                        # Filter out system processes on Mac
-                        apps.add(name)
-                    elif IS_LINUX:
-                        apps.add(name)
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                pass
-    except Exception as e:
-        pass
-    return apps
-
-def send_session_event(app_name, process_name, event_type, end_reason=None, timeoutSeconds=5):
-    """Send session start/end event to server.
-
-    Returns True if POST succeeded (status 200).
-    """
-    data = {
-        "username": USERNAME,
-        "applicationName": app_name,
-        "processName": process_name,
-        "eventType": event_type
-    }
-
-    if end_reason:
-        data["endReason"] = end_reason
-
-    try:
-        response = requests.post(SESSION_URL, json=data, timeout=timeoutSeconds)
-        return response.status_code == 200
-    except Exception:
-        return False
+            return None, None
+    elif IS_MAC:
+        try:
+            workspace = NSWorkspace.sharedWorkspace()
+            active_app = workspace.frontmostApplication()
+            if active_app:
+                app_name = active_app.localizedName()
+                return app_name, app_name
+        except:
+            pass
+        return None, None
+    return None, None
 
 def send_activity(app_name, window_title):
-    """Send activity log to server (only for dev apps)"""
-    if not window_title:
-        return True
-    
-    # Only track development-related apps
-    if not is_dev_app(app_name):
-        return True  # Skip silently
-        
     data = {
         "username": USERNAME,
         "applicationName": app_name,
-        "windowTitle": window_title,
-        "timestamp": datetime.now().isoformat()
+        "windowTitle": window_title or app_name
     }
-    
     try:
         response = requests.post(ACTIVITY_URL, json=data, timeout=5)
-        if response.status_code != 200:
-            print(f"[DEBUG] Activity POST failed with status {response.status_code}: {response.text[:100]}")
         return response.status_code == 200
     except Exception as e:
-        print(f"[DEBUG] Activity POST exception: {e}")
+        print(f"    Error: {e}")
         return False
 
-def track_sessions():
-    """Track which dev apps have started or stopped"""
-    global active_sessions
-    
-    current_apps = get_running_apps()
-    # Filter to only dev apps
-    current_dev_apps = {app for app in current_apps if is_dev_app(app)}
-    
-    # Check for newly started dev apps
-    for app in current_dev_apps:
-        if app not in active_sessions:
-            active_sessions[app] = {
-                "start_time": datetime.now(),
-                "process_name": app,
-                "sent": False
-            }
-            success = send_session_event(app, app, "start")
-            active_sessions[app]["sent"] = bool(success)
-            if success:
-                print(f"[{time.strftime('%H:%M:%S')}] 🟢 STARTED: {app}")
-    
-    # Check for closed dev apps
-    closed_apps = [app for app in active_sessions.keys() if app not in current_dev_apps]
-    for app in closed_apps:
-        session = active_sessions.pop(app)
-        duration = (datetime.now() - session["start_time"]).total_seconds()
-
-        # Determine end reason
-        end_reason = "killed" if duration < 5 else "normal"
-
-        # Only send end if start was successfully sent earlier
-        if session.get("sent"):
-            success = send_session_event(app, app, "end", end_reason)
-            if success:
-                print(f"[{time.strftime('%H:%M:%S')}] 🔴 CLOSED: {app} ({end_reason}, {int(duration)}s)")
-
-def cleanup(signum=None, frame=None):
-    """Cleanup function called on exit - close all active sessions quickly"""
-    print("\n" + "=" * 60)
-    print("  Shutting down tracker...")
-    print("=" * 60)
-    
-    # Send a single "end" event to mark user as offline
-    # Use very short timeout for fast shutdown
-    try:
-        data = {
-            "username": USERNAME,
-            "applicationName": "tracker",
-            "processName": "tracker.py",
-            "eventType": "end",
-            "endReason": "system_shutdown"
-        }
-        requests.post(SESSION_URL, json=data, timeout=0.5)
-        print("  ✅ Sent offline status")
-    except Exception:
-        print("  ⚠ Could not send offline status (server unreachable)")
-    
-    print("  Goodbye!")
-    sys.exit(0)
+def shutdown(signum=None, frame=None):
+    global running
+    running = False
+    print("\nShutting down tracker...")
 
 def main():
-    print("="*70)
-    print("  📊 WorkTracker - Activity & Session Monitor")
-    print("="*70)
+    global running
     
-    # Validate username
-    if not USERNAME:
-        print("\n❌ ERROR: Username not set!")
-        print("\nPlease set your username:")
-        print("  PowerShell:  $env:TRACKER_USER = 'your_username'")
-        print("  CMD:         set TRACKER_USER=your_username")
-        print("  Linux/Mac:   export TRACKER_USER=your_username")
-        print(f"\n✅ Valid usernames: {', '.join(VALID_MEMBERS)}")
-        sys.exit(1)
+    print("=" * 60)
+    print("  WorkTracker - Activity Monitor")
+    print("=" * 60)
     
-    if USERNAME.lower() not in VALID_MEMBERS:
-        print(f"\n❌ ERROR: Invalid username '{USERNAME}'")
-        print(f"\n✅ Valid usernames: {', '.join(VALID_MEMBERS)}")
-        print("\nSet your username with:")
-        print("  PowerShell:  $env:TRACKER_USER = 'your_username'")
+    if not USERNAME or USERNAME.lower() not in VALID_MEMBERS:
+        print(f"ERROR: Invalid username: '{USERNAME}'")
+        print(f"Valid usernames: {', '.join(VALID_MEMBERS)}")
+        print("Set with: $env:TRACKER_USER = 'your_username'")
         sys.exit(1)
 
-    print(f"\n  👤 User: {USERNAME}")
-    print(f"  🖥️  OS: {platform.system()}")
-    print(f"  🌐 Server: {SERVER_URL}")
-    print(f"  ⏱️  Interval: {TRACKING_INTERVAL} seconds")
-    print(f"  📱 Tracking: App Activity + Session Start/End")
+    print(f"User: {USERNAME}")
+    print(f"OS: {platform.system()}")
+    print(f"Server: {SERVER_URL}")
+    print(f"Interval: {TRACKING_INTERVAL} seconds")
     
-    # Test server connection
-    print(f"\n  🔌 Testing server connection...")
-    if test_server_connection():
-        print("  ✅ Server is reachable!")
-    else:
-        print("  ⚠️  Warning: Cannot reach server!")
-        if ENVIRONMENT == "development":
-            print("  💡 Make sure backend is running: cd backend && mvn spring-boot:run")
+    print("Testing server...")
+    try:
+        r = requests.get(f"{SERVER_URL}/activity/summary?date={datetime.now().strftime('%Y-%m-%d')}", timeout=10)
+        if r.status_code in [200, 404]:
+            print("Server is reachable!")
         else:
-            print("  💡 Check your TRACKER_SERVER URL or internet connection")
-        print("\n  Press Enter to continue anyway, or Ctrl+C to exit...")
+            print(f"Server returned: {r.status_code}")
+    except Exception as e:
+        print(f"Cannot reach server: {e}")
+
+    signal.signal(signal.SIGINT, shutdown)
+    signal.signal(signal.SIGTERM, shutdown)
+
+    print("=" * 60)
+    print("Tracker started! Press Ctrl+C to stop.")
+    print("")
+
+    while running:
         try:
-            input()
-        except KeyboardInterrupt:
-            print("\n  Exiting...")
-            sys.exit(0)
-
-    # Register cleanup handlers
-    signal.signal(signal.SIGINT, cleanup)
-    signal.signal(signal.SIGTERM, cleanup)
-    atexit.register(cleanup)
-
-    print("="*70)
-    print("\n🚀 Tracker started! Press Ctrl+C to stop.")
-    print("📌 Tracking all apps @ 30 sec interval\n")
-
-    # Send immediate activity log to show online status instantly
-    title, app_name = get_active_window_info()
-    if title and app_name:
-        send_activity(app_name, title)
-        print(f"[{time.strftime('%H:%M:%S')}] 📡 Initial status sent: {app_name}")
-
-    last_logged = None
-    error_count = 0
-    
-    # Initialize with current running apps
-    for app in get_running_apps():
-        if is_dev_app(app):
-            active_sessions[app] = {
-                "start_time": datetime.now(),
-                "process_name": app,
-                "sent": False
-            }
-            success = send_session_event(app, app, "start")
-            active_sessions[app]["sent"] = bool(success)
-    
-    sent_count = sum(1 for v in active_sessions.values() if v.get("sent"))
-    print(f"[{time.strftime('%H:%M:%S')}] Initialized with {len(active_sessions)} apps ({sent_count} started sent)\n")
-
-    loop_count = 0
-    while True:
-        try:
-            loop_count += 1
+            title, app_name = get_active_window()
             
-            # Track session changes (app starts/stops)
-            track_sessions()
-            
-            # Track active window
-            title, app_name = get_active_window_info()
-            
-            # Debug output every 10 loops (5 minutes at 30 sec interval)
-            if loop_count % 10 == 0:
-                print(f"[{time.strftime('%H:%M:%S')}] 🔄 Heartbeat #{loop_count} - Current: {app_name}")
-            
-            # Send activity if we have valid data
-            if title and app_name and app_name not in ("Unknown", "Error") and is_dev_app(app_name):
+            if app_name:
                 success = send_activity(app_name, title)
+                status = "OK" if success else "FAIL"
+                print(f"[{time.strftime('%H:%M:%S')}] {status} - {app_name[:40]}")
+            else:
+                print(f"[{time.strftime('%H:%M:%S')}] No active window")
+            
+            for _ in range(TRACKING_INTERVAL):
+                if not running:
+                    break
+                time.sleep(1)
                 
-                current = f"{app_name}|{title[:30]}"
-                if current != last_logged:
-                    if success:
-                        print(f"[{time.strftime('%H:%M:%S')}] ✓ Active: {app_name}")
-                        error_count = 0
-                    else:
-                        error_count += 1
-                        if error_count <= 3:
-                            print(f"[{time.strftime('%H:%M:%S')}] ⚠ Connection error (attempt {error_count}/3)")
-                    
-                    last_logged = current
-            elif app_name in ("Unknown", "Error"):
-                # Only log this occasionally to avoid spam
-                if loop_count % 10 == 1:
-                    print(f"[{time.strftime('%H:%M:%S')}] ⚠ Cannot get active window - check permissions")
-            
-            time.sleep(TRACKING_INTERVAL)
-            
-        except KeyboardInterrupt:
-            cleanup()
         except Exception as e:
-            print(f"[{time.strftime('%H:%M:%S')}] Error: {str(e)}")
-            time.sleep(TRACKING_INTERVAL)
+            print(f"[{time.strftime('%H:%M:%S')}] Error: {e}")
+            time.sleep(5)
+    
+    print("Goodbye!")
 
 if __name__ == "__main__":
     main()
