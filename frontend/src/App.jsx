@@ -35,10 +35,24 @@ function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [memberTimestamps, setMemberTimestamps] = useState({});
   const [currentSeconds, setCurrentSeconds] = useState(0);
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    const saved = localStorage.getItem('theme');
+    return saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  });
   
   const currentTime = useCurrentTime();
   const { members, loading: membersLoading, error: membersError, refetch: refetchMembers } = useMembers(selectedDate);
   const { dashboard, loading: dashboardLoading, error: dashboardError, refetch: refetchDashboard } = useDashboard(selectedMember, selectedDate);
+
+  // Apply theme to document
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
+    localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
+  }, [isDarkMode]);
 
   // Force re-render every second for live updates (optimized)
   useEffect(() => {
@@ -165,6 +179,13 @@ function App() {
           </nav>
         </div>
         <div className="header-right">
+          <button 
+            onClick={() => setIsDarkMode(!isDarkMode)} 
+            className="theme-toggle"
+            title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          >
+            {isDarkMode ? '☀️' : '🌙'}
+          </button>
           <div className="live-clock">
             <span className="pulse"></span>
             <span>{currentTime.toLocaleTimeString()}</span>
