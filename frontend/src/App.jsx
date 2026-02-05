@@ -40,6 +40,12 @@ function App() {
     return saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches);
   });
   
+  // Break tracking state
+  const [memberBreaks, setMemberBreaks] = useState(() => {
+    const saved = localStorage.getItem('memberBreaks');
+    return saved ? JSON.parse(saved) : {};
+  });
+  
   const currentTime = useCurrentTime();
   const { members, loading: membersLoading, error: membersError, refetch: refetchMembers } = useMembers(selectedDate);
   const { dashboard, loading: dashboardLoading, error: dashboardError, refetch: refetchDashboard } = useDashboard(selectedMember, selectedDate);
@@ -158,6 +164,58 @@ function App() {
 
   const getActiveCount = () => members.filter(m => m.isActive).length;
 
+  // Break management functions
+  const toggleBreak = (username, breakType) => {
+    setMemberBreaks(prev => {
+      const current = prev[username];
+      const now = new Date().toISOString();
+      
+      let updated;
+      if (current && current.type === breakType && current.startTime) {
+        // End break
+        updated = {
+          ...prev,
+          [username]: {
+            ...current,
+            endTime: now
+          }
+        };
+      } else {
+        // Start new break
+        updated = {
+          ...prev,
+          [username]: {
+            type: breakType,
+            startTime: now,
+            endTime: null
+          }
+        };
+      }
+      
+      localStorage.setItem('memberBreaks', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const getBreakDuration = (username) => {
+    const breakInfo = memberBreaks[username];
+    if (!breakInfo || !breakInfo.startTime) return 0;
+    
+    const start = new Date(breakInfo.startTime);
+    const end = breakInfo.endTime ? new Date(breakInfo.endTime) : new Date();
+    return Math.floor((end - start) / 1000); // seconds
+  };
+
+  const isOnBreak = (username) => {
+    const breakInfo = memberBreaks[username];
+    return breakInfo && breakInfo.startTime && !breakInfo.endTime;
+  };
+
+  const getBreakType = (username) => {
+    const breakInfo = memberBreaks[username];
+    return breakInfo?.type || null;
+  };
+
   return (
     <div className="app">
       {/* Animated Background Orbs */}
@@ -244,31 +302,67 @@ function App() {
               />
             ) : (
               <div className="members-grid">
-                {members.map((member) => (
-                  <div 
-                    key={member.username} 
-                    className={`member-card ${member.isActive ? 'active' : ''}`}
-                    onClick={() => setSelectedMember(member.username)}
-                  >
-                    <div className="member-header">
-                      <span className={`status-indicator ${member.isActive ? 'online' : 'offline'}`}></span>
-                      <span className="member-status">{member.isActive ? '● Online' : '○ Offline'}</span>
-                    </div>
-                    <h3>{member.fullName}</h3>
-                    <div className="time-display">
-                      <span className="time-value">{formatMinutesDetailed(member.totalActiveMinutes, getLiveSeconds(member))}</span>
-                      <span className="time-label">of 24h</span>
-                    </div>
-                    {member.currentApplication && (
-                      <div className="current-activity">
-                        <span className="app-badge">🔵 {member.currentApplication}</span>
+                {members.map((member) => {
+                  const onBreak = isOnBreak(member.username);
+                  const breakType = getBreakType(member.username);
+                  const breakDuration = getBreakDuration(member.username);
+                  
+                  return (
+                    <div 
+                      key={member.username} 
+                      className={`member-card ${member.isActive ? 'active' : ''} ${onBreak ? 'on-break' : ''}`}
+                    >
+                      <div className="member-header">
+                        <span className={`status-indicator ${member.isActive ? 'online' : 'offline'}`}></span>
+                        <span className="member-status">
+                          {onBreak ? `🍽️ On ${breakType}` : member.isActive ? '● Online' : '○ Offline'}
+                        </span>
                       </div>
-                    )}
-                    {member.topApp && (
-                      <p className="top-app">🏆 Top: {member.topApp}</p>
-                    )}
-                  </div>
-                ))}
+                      <h3 onClick={() => setSelectedMember(member.username)} style={{ cursor: 'pointer' }}>
+                        {member.fullName}
+                      </h3>
+                      
+                      {onBreak && (
+                        <div className="break-timer">
+                          <span className="break-icon">{breakType === 'Lunch' ? '🍱' : '🍽️'}</span>
+                          <span className="break-duration">{formatMinutesDetailed(Math.floor(breakDuration / 60), breakDuration % 60)}</span>
+                        </div>
+                      )}
+                      
+                      <div className="time-display">
+                        <span className="time-value">{formatMinutesDetailed(member.totalActiveMinutes, getLiveSeconds(member))}</span>
+                        <span className="time-label">of 24h</span>
+                      </div>
+                      
+                      {/* Break Buttons */}
+                      <div className="break-controls">
+                        <button 
+                          className={`break-btn ${onBreak && breakType === 'Lunch' ? 'active' : ''}`}
+                          onClick={(e) => { e.stopPropagation(); toggleBreak(member.username, 'Lunch'); }}
+                          title="Toggle Lunch Break"
+                        >
+                          🍱 Lunch
+                        </button>
+                        <button 
+                          className={`break-btn ${onBreak && breakType === 'Dinner' ? 'active' : ''}`}
+                          onClick={(e) => { e.stopPropagation(); toggleBreak(member.username, 'Dinner'); }}
+                          title="Toggle Dinner Break"
+                        >
+                          🍽️ Dinner
+                        </button>
+                      </div>
+                      
+                      {member.currentApplication && !onBreak && (
+                        <div className="current-activity">
+                          <span className="app-badge">🔵 {member.currentApplication}</span>
+                        </div>
+                      )}
+                      {member.topApp && (
+                        <p className="top-app">🏆 Top: {member.topApp}</p>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
