@@ -45,23 +45,23 @@
 [data-theme="dark"] {
   --bg-primary: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
   --bg-secondary: rgba(26, 26, 46, 0.95);
-  --bg-card: rgba(35, 35, 60, 0.8);
-  --bg-card-hover: rgba(45, 45, 75, 0.9);
-  --border-color: rgba(100, 100, 150, 0.25);
+  --bg-card: rgba(45, 45, 75, 0.95);
+  --bg-card-hover: rgba(55, 55, 90, 0.98);
+  --border-color: rgba(120, 120, 180, 0.4);
   --text-primary: #f7fafc;
   --text-secondary: #e2e8f0;
   --text-muted: #cbd5e0;
   
   /* Glassmorphism for dark mode */
-  --glass-bg: rgba(26, 26, 46, 0.5);
-  --glass-border: rgba(120, 120, 180, 0.25);
+  --glass-bg: rgba(35, 35, 60, 0.8);
+  --glass-border: rgba(120, 120, 180, 0.4);
   --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
   
   /* Shadows for dark mode */
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
   --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.6);
-  --shadow-glass: 0 8px 32px 0 rgba(102, 126, 234, 0.25);
+  --shadow-glass: 0 8px 32px 0 rgba(102, 126, 234, 0.3);
 }
 
 body {
@@ -166,6 +166,18 @@ body {
   z-index: 100;
 }
 
+[data-theme="dark"] .header {
+  background: rgba(26, 26, 46, 0.75);
+  border-bottom: 1px solid rgba(102, 126, 234, 0.2);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme="dark"] .header {
+  background: rgba(26, 26, 46, 0.75);
+  border-bottom: 1px solid rgba(102, 126, 234, 0.2);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
 .header h1 {
   font-size: 1.75rem;
   font-weight: 800;
@@ -193,6 +205,11 @@ body {
   padding: 0.5rem;
   border-radius: 16px;
   border: 1px solid var(--glass-border);
+}
+
+[data-theme="dark"] .nav-tabs {
+  background: rgba(35, 35, 60, 0.6);
+  border: 1px solid rgba(120, 120, 180, 0.25);
 }
 
 .nav-tabs button {
@@ -239,6 +256,12 @@ body {
   opacity: 1;
 }
 
+/* Dark mode nav tabs */
+[data-theme="dark"] .nav-tabs {
+  background: rgba(35, 35, 60, 0.6);
+  border: 1px solid rgba(120, 120, 180, 0.25);
+}
+
 /* Glassmorphic Live Clock */
 .live-clock {
   display: flex;
@@ -252,6 +275,11 @@ body {
   font-weight: 600;
   color: var(--text-primary);
   box-shadow: var(--shadow-glass);
+}
+
+[data-theme="dark"] .live-clock {
+  background: rgba(45, 45, 75, 0.7);
+  border: 1px solid rgba(120, 120, 180, 0.35);
 }
 
 .pulse {
@@ -418,6 +446,11 @@ body {
   box-shadow: var(--shadow-sm);
 }
 
+[data-theme="dark"] .theme-toggle {
+  background: rgba(45, 45, 75, 0.7);
+  border-color: rgba(120, 120, 180, 0.35);
+}
+
 .theme-toggle:hover {
   transform: translateY(-2px) rotate(15deg);
   box-shadow: var(--shadow-md);
@@ -427,6 +460,16 @@ body {
 
 .theme-toggle:active {
   transform: translateY(0px) rotate(0deg);
+}
+
+[data-theme="dark"] .theme-toggle {
+  background: rgba(45, 45, 75, 0.7);
+  border-color: rgba(120, 120, 180, 0.35);
+}
+
+[data-theme="dark"] .theme-toggle:hover {
+  background: rgba(55, 55, 90, 0.8);
+  border-color: rgba(102, 126, 234, 0.5);
 }
 
 .main { 
@@ -477,6 +520,24 @@ body {
   overflow: hidden;
 }
 
+/* Dark mode card styling */
+[data-theme="dark"] .member-card {
+  background: linear-gradient(135deg, rgba(50, 50, 85, 0.95) 0%, rgba(40, 40, 70, 0.9) 100%);
+  border: 1px solid rgba(120, 120, 180, 0.5);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 
+              0 0 0 1px rgba(102, 126, 234, 0.2),
+              inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .member-card::after {
+  background: linear-gradient(
+    45deg,
+    transparent 30%, 
+    rgba(102, 126, 234, 0.2) 50%, 
+    transparent 70%
+  );
+}
+
 @keyframes cardGradientFlow {
   0% { background-position: 0% 50%; }
   50% { background-position: 100% 50%; }
@@ -523,6 +584,14 @@ body {
   border-color: rgba(102, 126, 234, 0.5);
 }
 
+[data-theme="dark"] .member-card:hover {
+  background: linear-gradient(135deg, rgba(60, 60, 100, 1) 0%, rgba(50, 50, 85, 0.95) 100%);
+  box-shadow: 0 12px 40px rgba(102, 126, 234, 0.4), 
+              0 0 0 1px rgba(102, 126, 234, 0.4),
+              inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  border-color: rgba(102, 126, 234, 0.7);
+}
+
 .member-card:hover::before {
   opacity: 1;
 }
@@ -530,6 +599,14 @@ body {
 .member-card.active { 
   border-color: rgba(67, 233, 123, 0.6);
   box-shadow: 0 8px 32px rgba(67, 233, 123, 0.3);
+}
+
+[data-theme="dark"] .member-card.active {
+  background: linear-gradient(135deg, rgba(50, 80, 65, 0.95) 0%, rgba(40, 65, 55, 0.9) 100%);
+  border-color: rgba(67, 233, 123, 0.6);
+  box-shadow: 0 8px 32px rgba(67, 233, 123, 0.5), 
+              0 0 0 1px rgba(67, 233, 123, 0.3),
+              inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .member-card.active::before {
@@ -578,6 +655,12 @@ body {
   background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
   border-radius: 16px;
   margin-bottom: 1rem;
+}
+
+[data-theme="dark"] .time-display {
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.2) 0%, rgba(118, 75, 162, 0.2) 100%);
+  border: 1px solid rgba(102, 126, 234, 0.3);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .time-value {
@@ -681,6 +764,14 @@ body {
   overflow: hidden;
 }
 
+[data-theme="dark"] .stat-card {
+  background: linear-gradient(135deg, rgba(45, 45, 80, 0.9) 0%, rgba(35, 35, 65, 0.85) 100%);
+  border: 1px solid rgba(120, 120, 180, 0.4);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 
+              0 0 0 1px rgba(102, 126, 234, 0.12),
+              inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
 .stat-card::after {
   content: '';
   position: absolute;
@@ -701,6 +792,14 @@ body {
 .stat-card:hover {
   transform: translateY(-4px);
   box-shadow: 0 8px 32px rgba(102, 126, 234, 0.25);
+}
+
+[data-theme="dark"] .stat-card:hover {
+  background: linear-gradient(135deg, rgba(55, 55, 95, 1) 0%, rgba(45, 45, 80, 0.95) 100%);
+  box-shadow: 0 8px 32px rgba(102, 126, 234, 0.4), 
+              0 0 0 1px rgba(102, 126, 234, 0.2),
+              inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  border-color: rgba(102, 126, 234, 0.6);
 }
 
 .stat-card .icon { 
@@ -745,6 +844,14 @@ body {
   overflow: hidden;
 }
 
+[data-theme="dark"] .section {
+  background: linear-gradient(135deg, rgba(45, 45, 80, 0.95) 0%, rgba(35, 35, 65, 0.9) 100%);
+  border: 1px solid rgba(120, 120, 180, 0.4);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 
+              0 0 0 1px rgba(102, 126, 234, 0.15),
+              inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
 .section::after {
   content: '';
   position: absolute;
@@ -770,6 +877,12 @@ body {
 
 .section:hover {
   box-shadow: 0 12px 40px rgba(102, 126, 234, 0.2);
+}
+
+[data-theme="dark"] .section:hover {
+  background: linear-gradient(135deg, rgba(50, 50, 85, 0.85) 0%, rgba(40, 40, 70, 0.8) 100%);
+  box-shadow: 0 12px 40px rgba(102, 126, 234, 0.3), 0 0 0 1px rgba(102, 126, 234, 0.2);
+  border-color: rgba(102, 126, 234, 0.5);
 }
 
 .section h3 { 
@@ -1021,8 +1134,21 @@ body {
   transition: all 0.3s ease;
 }
 
+[data-theme="dark"] .timeline-item {
+  background: linear-gradient(135deg, rgba(45, 45, 75, 0.9) 0%, rgba(35, 35, 60, 0.85) 100%);
+  border: 1px solid rgba(120, 120, 180, 0.35);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
 .timeline-item:hover {
   box-shadow: 0 4px 16px rgba(102, 126, 234, 0.15);
+}
+
+[data-theme="dark"] .timeline-item:hover {
+  background: linear-gradient(135deg, rgba(55, 55, 90, 0.95) 0%, rgba(45, 45, 80, 0.9) 100%);
+  border-color: rgba(102, 126, 234, 0.5);
+  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3),
+              inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .timeline-time { 
@@ -1202,9 +1328,23 @@ body {
   transition: all 0.3s ease;
 }
 
+[data-theme="dark"] .stat-card-mini {
+  background: rgba(45, 45, 80, 0.9);
+  border: 1px solid rgba(120, 120, 180, 0.4);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 
+              inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
 .stat-card-mini:hover {
   transform: translateY(-4px);
   box-shadow: 0 8px 32px rgba(102, 126, 234, 0.25);
+}
+
+[data-theme="dark"] .stat-card-mini:hover {
+  background: rgba(55, 55, 95, 0.95);
+  border-color: rgba(102, 126, 234, 0.6);
+  box-shadow: 0 8px 32px rgba(102, 126, 234, 0.35),
+              inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 .stat-icon {
