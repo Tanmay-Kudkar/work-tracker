@@ -16,4 +16,7 @@ public class ActivityLogRequest {
 
     private String applicationName;
     private String timestamp; // Optional ISO 8601 timestamp from client
+    
+    @Builder.Default
+    private Boolean isIdle = false;
 }

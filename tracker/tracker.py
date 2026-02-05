@@ -18,6 +18,8 @@ if IS_WINDOWS:
     try:
         import win32gui
         import win32process
+        import win32api
+        from ctypes import Structure, windll, c_uint, sizeof, byref
     except ImportError:
         print("Missing Windows dependencies. Run: pip install pywin32")
         sys.exit(1)
@@ -46,8 +48,41 @@ TRACKING_INTERVAL = 30
 
 VALID_MEMBERS = ["tanmay_kudkar", "yash_thakur", "nidhish_vartak", "atharva_raut", "parth_waghe"]
 
+# Idle detection threshold (in seconds)
+IDLE_THRESHOLD = 300  # 5 minutes of no keyboard/mouse activity = idle
+
 running = True
 logout_sent = False  # Track if we already sent logout
+
+def get_idle_time():
+    """Get system idle time in seconds"""
+    if IS_WINDOWS:
+        class LASTINPUTINFO(Structure):
+            _fields_ = [
+                ('cbSize', c_uint),
+                ('dwTime', c_uint),
+            ]
+        
+        lastInputInfo = LASTINPUTINFO()
+        lastInputInfo.cbSize = sizeof(lastInputInfo)
+        windll.user32.GetLastInputInfo(byref(lastInputInfo))
+        millis = windll.kernel32.GetTickCount() - lastInputInfo.dwTime
+        return millis / 1000.0
+    elif IS_MAC:
+        try:
+            from Quartz import CGEventSourceSecondsSinceLastEventType, kCGEventSourceStateCombinedSessionState, kCGAnyInputEventType
+            idle_time = CGEventSourceSecondsSinceLastEventType(kCGEventSourceStateCombinedSessionState, kCGAnyInputEventType)
+            return idle_time
+        except:
+            return 0
+    else:
+        # Linux - requires xprintidle or similar
+        try:
+            import subprocess
+            idle_ms = subprocess.check_output(['xprintidle']).decode().strip()
+            return int(idle_ms) / 1000.0
+        except:
+            return 0
 
 def get_active_window():
     if IS_WINDOWS:
@@ -91,11 +126,12 @@ def get_active_window():
         return None, None
     return None, None
 
-def send_activity(app_name, window_title):
+def send_activity(app_name, window_title, is_idle=False):
     data = {
         "username": USERNAME,
-        "applicationName": app_name,
-        "windowTitle": window_title or app_name
+        "applicationName": app_name if not is_idle else "Idle",
+        "windowTitle": window_title or app_name,
+        "isIdle": is_idle
     }
     try:
         response = requests.post(ACTIVITY_URL, json=data, timeout=5)
@@ -174,12 +210,21 @@ def main():
 
     while running:
         try:
+            # Check idle time
+            idle_seconds = get_idle_time()
+            is_idle = idle_seconds >= IDLE_THRESHOLD
+            
             title, app_name = get_active_window()
             
-            if app_name:
-                success = send_activity(app_name, title)
-                status = "OK" if success else "FAIL"
-                print(f"[{time.strftime('%H:%M:%S')}] {status} - {app_name[:40]}")
+            if app_name or is_idle:
+                if is_idle:
+                    success = send_activity("System", "Idle", is_idle=True)
+                    status = "IDLE" if success else "FAIL"
+                    print(f"[{time.strftime('%H:%M:%S')}] {status} - Idle for {int(idle_seconds)}s")
+                else:
+                    success = send_activity(app_name, title, is_idle=False)
+                    status = "OK" if success else "FAIL"
+                    print(f"[{time.strftime('%H:%M:%S')}] {status} - {app_name[:40]}")
             else:
                 print(f"[{time.strftime('%H:%M:%S')}] No active window")
             

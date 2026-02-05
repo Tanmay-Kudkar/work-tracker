@@ -31,4 +31,7 @@ public class ActivityLog {
     private String username;
     private String applicationName;
     private LocalDateTime timestamp;
+    
+    @Builder.Default
+    private Boolean isIdle = false;
 }

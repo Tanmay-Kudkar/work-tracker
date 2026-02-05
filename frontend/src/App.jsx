@@ -281,7 +281,10 @@ function App() {
                 <h2>📊 {dashboard?.fullName || selectedMember}</h2>
                 <p className="subtitle">
                   {new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })} · 
-                  Total time: <strong>{formatMinutes(dashboard?.totalActiveMinutes || 0)}</strong>
+                  Active: <strong>{formatMinutes(dashboard?.totalActiveMinutes || 0)}</strong>
+                  {dashboard?.idleMinutes > 0 && (
+                    <span> · Idle: <strong className="idle-time">{formatMinutes(dashboard.idleMinutes)}</strong></span>
+                  )}
                 </p>
               </div>
             </div>
@@ -366,8 +369,40 @@ function App() {
 }
 
 function SummaryTab({ dashboard }) {
+  const totalMinutes = (dashboard?.totalActiveMinutes || 0) + (dashboard?.idleMinutes || 0);
+  const activePercentage = totalMinutes > 0 ? ((dashboard?.totalActiveMinutes || 0) / totalMinutes * 100) : 0;
+  const idlePercentage = totalMinutes > 0 ? ((dashboard?.idleMinutes || 0) / totalMinutes * 100) : 0;
+  
   return (
     <div className="dashboard-grid">
+      {/* Active vs Idle Time Stats */}
+      {dashboard?.idleMinutes > 0 && (
+        <div className="section idle-stats-section">
+          <h3>⏱️ Activity Breakdown</h3>
+          <div className="idle-stats">
+            <div className="idle-stat active-stat">
+              <div className="idle-stat-icon">✅</div>
+              <div className="idle-stat-info">
+                <span className="idle-stat-label">Active Time</span>
+                <span className="idle-stat-value">{formatMinutes(dashboard.totalActiveMinutes)}</span>
+                <span className="idle-stat-percentage">{activePercentage.toFixed(1)}%</span>
+              </div>
+            </div>
+            <div className="idle-stat idle-stat-item">
+              <div className="idle-stat-icon">💤</div>
+              <div className="idle-stat-info">
+                <span className="idle-stat-label">Idle Time</span>
+                <span className="idle-stat-value">{formatMinutes(dashboard.idleMinutes)}</span>
+                <span className="idle-stat-percentage">{idlePercentage.toFixed(1)}%</span>
+              </div>
+            </div>
+          </div>
+          <div className="idle-progress-bar">
+            <div className="idle-progress-fill" style={{ width: `${activePercentage}%` }}></div>
+          </div>
+        </div>
+      )}
+      
       {/* Top Applications */}
       <div className="section">
         <h3>🚀 Top Applications</h3>

@@ -48,28 +48,39 @@ public class ActivityService {
                 .username(request.getUsername())
                 .applicationName(request.getApplicationName())
                 .timestamp(timestamp)
+                .isIdle(request.getIsIdle() != null ? request.getIsIdle() : false)
                 .build();
 
-        // Mark user as currently working (online) when activity is received
         TeamMember member = teamMemberRepository.findByUsername(request.getUsername())
                 .orElseGet(() -> {
                     TeamMember newMember = TeamMember.builder()
                             .username(request.getUsername())
                             .fullName(MEMBER_NAMES.getOrDefault(request.getUsername(), request.getUsername()))
                             .totalWorkingMinutes(0L)
-                            .isCurrentlyWorking(true)
+                            .isCurrentlyWorking(false)
                             .build();
                     return teamMemberRepository.save(newMember);
                 });
 
-        if (!Boolean.TRUE.equals(member.getIsCurrentlyWorking())) {
+        // If user is idle (5+ minutes of no keyboard/mouse), mark as offline
+        if (Boolean.TRUE.equals(request.getIsIdle())) {
+            log.info("User {} is idle - marking as offline", request.getUsername());
+            member.setIsCurrentlyWorking(false);
+            member.setCurrentApplication(null);
+            teamMemberRepository.save(member);
+        } else {
+            // User is active - mark as working and update current app
+            if (!Boolean.TRUE.equals(member.getIsCurrentlyWorking())) {
+                log.info("User {} is now active", request.getUsername());
+            }
             member.setIsCurrentlyWorking(true);
             member.setCurrentApplication(request.getApplicationName());
             teamMemberRepository.save(member);
         }
 
-        log.info("Logging activity for user: {}, app: {} at {}",
-                request.getUsername(), request.getApplicationName(), timestamp);
+        log.info("Logging activity for user: {}, app: {}, idle: {} at {}",
+                request.getUsername(), request.getApplicationName(), 
+                request.getIsIdle(), timestamp);
 
         return activityLogRepository.save(activityLog);
     }
@@ -109,6 +120,7 @@ public class ActivityService {
         dashboard.put("fullName", MEMBER_NAMES.getOrDefault(username, username));
         dashboard.put("date", date.toString());
         dashboard.put("totalActiveMinutes", calculateTotalActiveTime(logs));
+        dashboard.put("idleMinutes", calculateIdleTime(logs));
         dashboard.put("topApplications", getTopApplications(logs));
         dashboard.put("hourlyActivity", getHourlyActivity(logs, tzOffsetMinutes));
         dashboard.put("categories", getCategoryBreakdown(logs));
@@ -214,8 +226,19 @@ public class ActivityService {
     private static final int SECONDS_PER_LOG = 30;
 
     private long calculateTotalActiveTime(List<ActivityLog> logs) {
-        // Each log = 10 seconds, so total minutes = (logs * 10) / 60
-        return (logs.size() * SECONDS_PER_LOG) / 60;
+        // Filter out idle time, each log = 30 seconds
+        long activeLogs = logs.stream()
+                .filter(log -> !Boolean.TRUE.equals(log.getIsIdle()))
+                .count();
+        return (activeLogs * SECONDS_PER_LOG) / 60;
+    }
+    
+    private long calculateIdleTime(List<ActivityLog> logs) {
+        // Count idle logs only
+        long idleLogs = logs.stream()
+                .filter(log -> Boolean.TRUE.equals(log.getIsIdle()))
+                .count();
+        return (idleLogs * SECONDS_PER_LOG) / 60;
     }
 
     private List<Map<String, Object>> getTopApplications(List<ActivityLog> logs) {

@@ -10,4 +10,6 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
     Optional<TeamMember> findByUsername(String username);
 
     List<TeamMember> findAllByOrderByTotalWorkingMinutesDesc();
+    
+    List<TeamMember> findByIsCurrentlyWorking(Boolean isCurrentlyWorking);
 }
