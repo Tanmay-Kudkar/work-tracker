@@ -70,6 +70,83 @@ export const api = {
       body: JSON.stringify(data),
     });
     return handleResponse(response);
+  },
+
+  // Leave Management APIs
+  async createLeaveRequest(leaveData) {
+    const response = await fetch(`${API_BASE}/leaves/request`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(leaveData),
+    });
+    return handleResponse(response);
+  },
+
+  async getUserLeaves(username) {
+    const response = await fetch(`${API_BASE}/leaves/user/${username}`);
+    return handleResponse(response);
+  },
+
+  async getPendingLeaves() {
+    const response = await fetch(`${API_BASE}/leaves/pending`);
+    return handleResponse(response);
+  },
+
+  async getApprovedLeaves(startDate, endDate) {
+    const response = await fetch(`${API_BASE}/leaves/approved?startDate=${startDate}&endDate=${endDate}`);
+    return handleResponse(response);
+  },
+
+  async approveLeave(leaveId, approvedBy) {
+    const response = await fetch(`${API_BASE}/leaves/${leaveId}/approve?approvedBy=${approvedBy}`, {
+      method: 'POST',
+    });
+    return handleResponse(response);
+  },
+
+  async rejectLeave(leaveId, rejectedBy) {
+    const response = await fetch(`${API_BASE}/leaves/${leaveId}/reject?rejectedBy=${rejectedBy}`, {
+      method: 'POST',
+    });
+    return handleResponse(response);
+  },
+
+  async deleteLeaveRequest(leaveId) {
+    const response = await fetch(`${API_BASE}/leaves/${leaveId}`, {
+      method: 'DELETE',
+    });
+    return handleResponse(response);
+  },
+
+  // Holiday Management APIs
+  async createHoliday(holidayData) {
+    const response = await fetch(`${API_BASE}/leaves/holidays`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(holidayData),
+    });
+    return handleResponse(response);
+  },
+
+  async getAllHolidays() {
+    const response = await fetch(`${API_BASE}/leaves/holidays`);
+    return handleResponse(response);
+  },
+
+  async getUpcomingHolidays() {
+    const response = await fetch(`${API_BASE}/leaves/holidays/upcoming`);
+    return handleResponse(response);
+  },
+
+  async deleteHoliday(holidayId) {
+    const response = await fetch(`${API_BASE}/leaves/holidays/${holidayId}`, {
+      method: 'DELETE',
+    });
+    return handleResponse(response);
   }
 };
 

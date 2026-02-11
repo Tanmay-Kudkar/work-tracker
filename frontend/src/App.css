@@ -14,6 +14,9 @@
   --text-primary: #1a202c;
   --text-secondary: #4a5568;
   --text-muted: #718096;
+  --primary-color: #667eea;
+  --primary-hover: #5568d3;
+  --hover-bg: #f3f4f6;
   
   /* Vibrant Gradient Colors */
   --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -51,6 +54,9 @@
   --text-primary: #f7fafc;
   --text-secondary: #e2e8f0;
   --text-muted: #cbd5e0;
+  --primary-color: #8b93ff;
+  --primary-hover: #7078ff;
+  --hover-bg: #2d3748;
   
   /* Glassmorphism for dark mode */
   --glass-bg: rgba(35, 35, 60, 0.8);
@@ -804,6 +810,52 @@ body {
 .member-card.on-break::before {
   background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
   opacity: 1;
+}
+
+/* Leave card state */
+.member-card.on-leave {
+  border-color: rgba(168, 85, 247, 0.5);
+  box-shadow: 0 8px 32px rgba(168, 85, 247, 0.2);
+}
+
+[data-theme="dark"] .member-card.on-leave {
+  border-color: rgba(168, 85, 247, 0.6);
+  box-shadow: 0 8px 32px rgba(168, 85, 247, 0.3), 0 0 0 1px rgba(168, 85, 247, 0.2);
+}
+
+.member-card.on-leave::before {
+  background: linear-gradient(135deg, #a855f7 0%, #9333ea 100%);
+  opacity: 1;
+}
+
+/* Leave and Holiday Badges */
+.leave-badge, .holiday-badge {
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.leave-badge {
+  background: rgba(168, 85, 247, 0.1);
+  color: #a855f7;
+  border: 1px solid rgba(168, 85, 247, 0.3);
+}
+
+.holiday-badge {
+  background: rgba(251, 146, 60, 0.1);
+  color: #fb923c;
+  border: 1px solid rgba(251, 146, 60, 0.3);
+}
+
+[data-theme="dark"] .leave-badge {
+  background: rgba(168, 85, 247, 0.2);
+  color: #c084fc;
+}
+
+[data-theme="dark"] .holiday-badge {
+  background: rgba(251, 146, 60, 0.2);
+  color: #fdba74;
 }
 
 .top-app {

@@ -26,6 +26,7 @@ public class ActivityService {
 
     private final ActivityLogRepository activityLogRepository;
     private final TeamMemberRepository teamMemberRepository;
+    private final LeaveService leaveService;
 
     private static final Set<String> VALID_MEMBERS = Set.of(
             "tanmay_kudkar", "yash_thakur", "nidhish_vartak", "atharva_raut", "parth_waghe");
@@ -97,7 +98,7 @@ public class ActivityService {
         boolean isToday = date.equals(LocalDate.now(java.time.ZoneOffset.UTC));
 
         return VALID_MEMBERS.stream()
-            .map(username -> createMemberSummary(username, startOfDayUtc, endOfDayUtc, nowUtc, isToday))
+            .map(username -> createMemberSummary(username, startOfDayUtc, endOfDayUtc, nowUtc, isToday, date))
             .sorted(Comparator.comparing(MemberSummaryDto::getTotalActiveMinutes).reversed())
             .collect(Collectors.toList());
     }
@@ -115,10 +116,16 @@ public class ActivityService {
         List<ActivityLog> logs = activityLogRepository
                 .findByUsernameAndTimestampBetweenOrderByTimestampAsc(username, startOfDayUtc, endOfDayUtc);
 
+        // Check if user is on leave or if it's a holiday
+        boolean isOnLeave = leaveService.isUserOnLeave(username, date);
+        boolean isHoliday = leaveService.isHoliday(date);
+
         Map<String, Object> dashboard = new HashMap<>();
         dashboard.put("username", username);
         dashboard.put("fullName", MEMBER_NAMES.getOrDefault(username, username));
         dashboard.put("date", date.toString());
+        dashboard.put("isOnLeave", isOnLeave);
+        dashboard.put("isHoliday", isHoliday);
         dashboard.put("totalActiveMinutes", calculateTotalActiveTime(logs));
         dashboard.put("idleMinutes", calculateIdleTime(logs));
         dashboard.put("topApplications", getTopApplications(logs));
@@ -172,11 +179,14 @@ public class ActivityService {
     }
 
     private MemberSummaryDto createMemberSummary(String username, LocalDateTime start, LocalDateTime end,
-            LocalDateTime now, boolean isToday) {
+            LocalDateTime now, boolean isToday, LocalDate date) {
         List<ActivityLog> logs = activityLogRepository
                 .findByUsernameAndTimestampBetweenOrderByTimestampAsc(username, start, end);
 
         long totalMinutes = calculateTotalActiveTime(logs);
+
+        // Check if user is on leave
+        boolean isOnLeave = leaveService.isUserOnLeave(username, date);
 
         // First check if user explicitly logged out (isCurrentlyWorking = false in
         // TeamMember)
@@ -213,6 +223,7 @@ public class ActivityService {
                 .isActive(isActive)
                 .currentApplication(currentApp)
                 .topApp(getTopApp(logs))
+                .isOnLeave(isOnLeave)
                 .build();
     }
 

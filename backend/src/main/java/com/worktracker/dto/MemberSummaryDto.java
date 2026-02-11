@@ -17,4 +17,5 @@ public class MemberSummaryDto {
     private Boolean isActive;
     private String currentApplication;
     private String topApp;
+    private Boolean isOnLeave;
 }

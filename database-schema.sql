@@ -45,6 +45,41 @@ CREATE TABLE work_session (
 CREATE INDEX idx_session_active ON work_session(is_active, username);
 
 -- =====================================================
+-- 4. Holiday Table (Company-wide holidays)
+-- =====================================================
+CREATE TABLE holiday (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    date DATE NOT NULL UNIQUE,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Index for date lookup
+CREATE INDEX idx_holiday_date ON holiday(date);
+
+-- =====================================================
+-- 5. Leave Table (Personal time off)
+-- =====================================================
+CREATE TABLE leave_request (
+    id BIGSERIAL PRIMARY KEY,
+    username VARCHAR(255) NOT NULL,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    leave_type VARCHAR(50) NOT NULL, -- SICK, VACATION, PERSONAL, etc.
+    reason TEXT,
+    status VARCHAR(20) DEFAULT 'PENDING', -- PENDING, APPROVED, REJECTED
+    requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    approved_by VARCHAR(255),
+    approved_at TIMESTAMP
+);
+
+-- Indexes for performance
+CREATE INDEX idx_leave_username ON leave_request(username);
+CREATE INDEX idx_leave_dates ON leave_request(start_date, end_date);
+CREATE INDEX idx_leave_status ON leave_request(status);
+
+-- =====================================================
 -- Sample Queries for Common Operations
 -- =====================================================
 

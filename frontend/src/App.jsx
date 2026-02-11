@@ -4,6 +4,7 @@ import { BarChart, Bar, PieChart, Pie, Cell,
 import { useMembers, useDashboard, useCurrentTime, useWeeklySummary } from './hooks'
 import { SkeletonCard, SkeletonChart, SkeletonList } from './components/Skeleton'
 import { ErrorMessage, EmptyState } from './components/ErrorMessage'
+import { LeaveCalendar } from './components/LeaveCalendar'
 import './App.css'
 
 const COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#f97316', '#eab308', '#06b6d4', '#14b8a6'];
@@ -234,6 +235,9 @@ function App() {
             <button className={activeTab === 'timeline' ? 'active' : ''} onClick={() => setActiveTab('timeline')}>
               📈 Timeline
             </button>
+            <button className={activeTab === 'leaves' ? 'active' : ''} onClick={() => { setActiveTab('leaves'); setSelectedMember(null); }}>
+              🏖️ Leaves
+            </button>
           </nav>
         </div>
         <div className="header-right">
@@ -277,6 +281,9 @@ function App() {
             getLiveSeconds={getLiveSeconds} 
             currentSeconds={currentSeconds} 
           />
+        ) : activeTab === 'leaves' ? (
+          /* Leave Management View */
+          <LeaveCalendar currentUser="atharva_raut" />
         ) : !selectedMember ? (
           /* Team Overview */
           <div className="team-overview">
@@ -306,16 +313,17 @@ function App() {
                   const onBreak = isOnBreak(member.username);
                   const breakType = getBreakType(member.username);
                   const breakDuration = getBreakDuration(member.username);
+                  const onLeave = member.isOnLeave;
                   
                   return (
                     <div 
                       key={member.username} 
-                      className={`member-card ${member.isActive ? 'active' : ''} ${onBreak ? 'on-break' : ''}`}
+                      className={`member-card ${member.isActive ? 'active' : ''} ${onBreak ? 'on-break' : ''} ${onLeave ? 'on-leave' : ''}`}
                     >
                       <div className="member-header">
                         <span className={`status-indicator ${member.isActive ? 'online' : 'offline'}`}></span>
                         <span className="member-status">
-                          {onBreak ? `🍽️ On ${breakType}` : member.isActive ? '● Online' : '○ Offline'}
+                          {onLeave ? '🏖️ On Leave' : onBreak ? `🍽️ On ${breakType}` : member.isActive ? '● Online' : '○ Offline'}
                         </span>
                       </div>
                       <h3 onClick={() => setSelectedMember(member.username)} style={{ cursor: 'pointer' }}>
@@ -378,6 +386,12 @@ function App() {
                   Active: <strong>{formatMinutes(dashboard?.totalActiveMinutes || 0)}</strong>
                   {dashboard?.idleMinutes > 0 && (
                     <span> · Idle: <strong className="idle-time">{formatMinutes(dashboard.idleMinutes)}</strong></span>
+                  )}
+                  {dashboard?.isOnLeave && (
+                    <span className="leave-badge"> · 🏖️ On Leave</span>
+                  )}
+                  {dashboard?.isHoliday && (
+                    <span className="holiday-badge"> · 🎉 Holiday</span>
                   )}
                 </p>
               </div>
